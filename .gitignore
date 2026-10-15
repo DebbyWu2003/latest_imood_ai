@@ -32,6 +32,8 @@ config/paths.local.bat
 # ---- large / personal media that is not part of the demo ----
 # ad-hoc recordings dropped in the repo root
 /*.mp4
+# generated idle-avatar videos (assets/avatar/idle_*.mp4); assets/avatar/idle.mp4 is already tracked, so it is unaffected
+*.mp4
 # reference-voice candidate recordings (only assets/ref.wav is used)
 assets/voice/
 # PNG conversion of the avatar image (ComfyUI input), regenerable from the .webp
