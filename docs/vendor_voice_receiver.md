@@ -31,7 +31,7 @@ Setup: only LiveTalking was started (no voice service / llama), endpoint `ws://l
 | Stop mid-transmission (`aborted`) | PASS: sender shows 已停止, utterance closed with an end frame, queue empty |
 | Receiver restart: sender shows reconnecting, then reconnects by itself; after reopening the video page, playback works | PASS |
 | Lip-sync follows the voice, no audio stutter | PASS (observed by the user) |
-| Idle 10 minutes, then send | not tested yet |
+| Idle 10 minutes (connection and video page left untouched), then send | PASS: still 已連線, playback started and sender showed 播放中 |
 | Production `wss://` endpoint | not set up (cloud teammate) |
 
 Not covered: the emotion message on `/sse` was only verified by the protocol test; nothing consumes it yet (emotion teammate). Only the real-time sending mode was tried with the real avatar; the "一次傳送" (burst) mode was not.
