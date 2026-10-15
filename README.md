@@ -2,11 +2,13 @@
 
 A fully local voice-to-avatar pipeline. A spoken question (WAV) is transcribed by **Faster-Whisper**, answered by **Qwen3-14B** (llama.cpp), and spoken back in a **cloned voice** (Qwen3-TTS via faster-qwen3-tts, streamed). A **LiveTalking / Wav2Lip** avatar lip-syncs the answer live in the browser over **WebRTC**.
 
-**Current status: working end-to-end demo.** Local ASR · local LLM · local cloned TTS · streaming audio · LiveTalking/Wav2Lip avatar · WebRTC browser demo. No cloud APIs are used at runtime.
+> **Speech source (current default): vendor real-time voice.** The local ASR + LLM + TTS pipeline described below is **switched off by default** (`LEGACY_VOICE=0` in `config/paths.env` / `config/paths.bat`); startup then only launches LiveTalking. The avatar speaks audio pushed by the vendor to `ws://localhost:8010/cyber_gf/voice` (needs `VENDOR_VOICE_TOKEN`), see [docs/vendor_voice_receiver.md](docs/vendor_voice_receiver.md) and [docs/emotion_interface.md](docs/emotion_interface.md). The record-a-question button of the imood page only works with `LEGACY_VOICE=1`; sending recordings to the vendor is still to be defined. Everything below describes the legacy pipeline and still works with `LEGACY_VOICE=1`.
+
+**Legacy pipeline status: working end-to-end demo.** Local ASR · local LLM · local cloned TTS · streaming audio · LiveTalking/Wav2Lip avatar · WebRTC browser demo. No cloud APIs are used at runtime.
 
 ---
 
-## Quick Start (reference machine)
+## Quick Start (reference machine, legacy pipeline: set `LEGACY_VOICE=1` first, e.g. in `config/paths.local.env` and `config/paths.local.bat`)
 
 **Prerequisites.** These already exist on the reference machine; on a new machine see [Installation](#installation--reproduction).
 - Windows with WSL distro **Ubuntu-24.04**, using mirrored networking (`config/wslconfig.example`)

@@ -14,6 +14,7 @@ LiveTalking announces when a start/end frame is actually played; the receiver th
 - Latency: 480 ms pre-roll, then 200 ms blocks (`VENDOR_PREROLL_FRAMES`, `VENDOR_BLOCK_FRAMES`) so a real-time sender does not starve the lip-sync thread.
 - Close codes: 4001 bad token/origin, 4002 replaced by a newer sender, 4003 unsupported version. Allowed origin: the vendor sender page (+ `VENDOR_ALLOWED_ORIGINS`, comma separated).
 - Aborted / superseded / disconnected utterances keep the audio already queued and are closed with an end frame.
+- The old Whisper + llama.cpp + TTS pipeline is off by default (`LEGACY_VOICE=0`; set `1` in `config/paths.local.env` and `config/paths.local.bat` to bring it back).
 - Production needs a public `wss://` URL with a CA-signed certificate (the sender page is HTTPS). Cloud deployment is owned by another teammate; this receiver is one route on the LiveTalking port (8010), so the `wss://` proxy only has to forward `/cyber_gf/voice` as a WebSocket. Not set up yet.
 
 ## Tests
