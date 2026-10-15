@@ -10,7 +10,7 @@
   },
   "livetalking": {
     "url": "http://localhost:8010",
-    "avatar_id": "wav2lip256_myavatar",
+    "avatar_id": "wav2lip256_avatar3_WA3",
     "speaking_poll_s": 0.04,
     "speaking_start_timeout_s": 15
   },

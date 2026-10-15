@@ -26,7 +26,7 @@
   },
   "livetalking": {
     "url": "http://localhost:8010",
-    "avatar_id": "wav2lip256_myavatar"
+    "avatar_id": "wav2lip256_avatar3_WA3"
   },
   "output_dir": "outputs/step12_v2"
 }

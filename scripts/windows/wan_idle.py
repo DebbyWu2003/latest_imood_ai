@@ -1,6 +1,8 @@
 """Submit the official ComfyUI 'video_wan2_2_14B_i2v' template (flattened to API format,
-default non-turbo path) with the article's step-4 settings, then wait and print the output path."""
-import json, sys, time, urllib.request, random
+default non-turbo path) with the article's step-4 settings, then wait and print the output path.
+
+Usage: python wan_idle.py [--image NAME_IN_ComfyUI/input] [--prefix video/idle] [--prompt TEXT] [--neg-extra TEXT] [--seed N]"""
+import argparse, json, sys, time, urllib.request, random
 
 HOST = "http://127.0.0.1:8188"
 # Article step 4 prompt (actions only, no appearance description)
@@ -12,10 +14,20 @@ NEG = ("色调艳丽，过曝，静态，细节模糊不清，字幕，风格，
 W, H, DURATION, FPS = 704, 896, 5, 16          # article: 704x896, 5 s; template fps 16 -> 81 frames
 LENGTH = int(DURATION * FPS + 1)
 STEPS, CFG, SPLIT = 20, 3.5, 10                  # template defaults (enable_turbo_mode = false)
-seed = random.randint(0, 2**48)
+ap = argparse.ArgumentParser()
+ap.add_argument("--image", default="xiaoya_avatar.png")
+ap.add_argument("--prefix", default="video/idle")
+ap.add_argument("--prompt", default=PROMPT)
+ap.add_argument("--neg-extra", default="", help="appended to the template negative prompt")
+ap.add_argument("--seed", type=int, default=None)
+args = ap.parse_args()
+IMAGE, PREFIX, PROMPT = args.image, args.prefix, args.prompt
+if args.neg_extra:
+    NEG = NEG + "，" + args.neg_extra
+seed = args.seed if args.seed is not None else random.randint(0, 2**48)
 
 g = {
-    "1": {"class_type": "LoadImage", "inputs": {"image": "xiaoya_avatar.png"}},
+    "1": {"class_type": "LoadImage", "inputs": {"image": IMAGE}},
     "2": {"class_type": "CLIPLoader", "inputs": {"clip_name": "umt5_xxl_fp8_e4m3fn_scaled.safetensors", "type": "wan", "device": "default"}},
     "3": {"class_type": "VAELoader", "inputs": {"vae_name": "wan_2.1_vae.safetensors"}},
     "4": {"class_type": "UNETLoader", "inputs": {"unet_name": "wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors", "weight_dtype": "default"}},
@@ -36,7 +48,7 @@ g = {
             "return_with_leftover_noise": "disable"}},
     "13": {"class_type": "VAEDecode", "inputs": {"samples": ["12", 0], "vae": ["3", 0]}},
     "14": {"class_type": "CreateVideo", "inputs": {"images": ["13", 0], "fps": float(FPS)}},
-    "15": {"class_type": "SaveVideo", "inputs": {"video": ["14", 0], "filename_prefix": "video/idle", "format": "auto", "codec": "auto"}},
+    "15": {"class_type": "SaveVideo", "inputs": {"video": ["14", 0], "filename_prefix": PREFIX, "format": "auto", "codec": "auto"}},
 }
 
 req = urllib.request.Request(f"{HOST}/prompt", data=json.dumps({"prompt": g}).encode(), headers={"Content-Type": "application/json"})
