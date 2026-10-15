@@ -8,6 +8,7 @@ few project routes are registered in the same aiohttp app (before upstream's cat
            enqueued atomically per received block (see put_batch)
            exactly like LiveTalking's own streaming TTS (tts/qwentts.py): 'start' on the first frame of the
            utterance only, then a trailing zero frame carrying 'end'.
+  WS   /cyber_gf/voice?token=..   vendor real-time voice receiver (vendor_voice.py; needs env VENDOR_VOICE_TOKEN)
   GET  /cyber_gf/utt/{utt}     per-utterance stats: frames, queue depth, underruns, playback start/end
   GET  /cyber_gf/stats         sessions + queue depth + last LiveTalking infer/final fps
   GET  /imood/...              project frontend (C:/.../cyber_gf/web), page /imood/imood_ai.html
@@ -33,6 +34,7 @@ import server.routes as lt_routes
 from server.session_manager import session_manager
 from avatars.base_avatar import AudioFrameData
 from utils.logger import logger
+from vendor_voice import VendorReceiver
 
 FRAME = 320                       # 20 ms @ 16 kHz, as BaseASR.chunk
 FRAME_BYTES = FRAME * 4           # float32
@@ -225,6 +227,14 @@ def _cuda_mem():
         return {"error": str(e)}
 
 
+def _latest_session():
+    """The vendor protocol carries no sessionid: play on the most recently opened LiveTalking session."""
+    live = [s for s in session_manager.sessions.values() if s is not None]
+    return live[-1] if live else None
+
+
+vendor = VendorReceiver(_latest_session, lambda data, ud: AudioFrameData(data=data, type=0, userdata=ud))
+
 _orig_setup_routes = lt_routes.setup_routes
 
 
@@ -233,6 +243,7 @@ def setup_routes_with_cyber_gf(app):
     app.router.add_post("/cyber_gf/audio_stream", audio_stream)
     app.router.add_get("/cyber_gf/utt/{utt}", utt_status)
     app.router.add_get("/cyber_gf/stats", stats)
+    app.router.add_get("/cyber_gf/voice", vendor.handle)     # vendor real-time voice WebSocket (docs/vendor_voice_receiver.md)
     app.router.add_static("/imood/", path=str(PROJECT / "web"), show_index=False)
     logger.info("[cyber_gf] adapter routes registered: /cyber_gf/audio_stream, /cyber_gf/utt/{utt}, /cyber_gf/stats, /imood/")
     _orig_setup_routes(app)
