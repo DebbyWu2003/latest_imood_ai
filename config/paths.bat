@@ -22,6 +22,10 @@ set COMFY_PORT=8188
 rem Frontend page
 set FRONTEND_URL=http://localhost:8010/imood/imood_ai.html
 
+rem 0 (default) = do not start llama-server / the legacy voice service (speech comes from the vendor, docs/vendor_voice_receiver.md)
+rem 1 = start them as before. Keep in sync with LEGACY_VOICE in config\paths.env.
+set LEGACY_VOICE=0
+
 rem machine-local overrides (gitignored)
 if exist "%~dp0paths.local.bat" call "%~dp0paths.local.bat"
 
