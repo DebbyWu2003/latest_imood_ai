@@ -20,7 +20,7 @@ The package (`install-voice.sh`, `start-voice.sh`, `start-livetalking.sh`, `avat
 | `install-voice.sh` → "speech-to-speech" with VAD / Whisper / Qwen3-TTS, web UI on :7860 | `scripts/wsl/tts_fast_install.sh` (Faster-Whisper large-v3 + faster-qwen3-tts) and `scripts/wsl/voice_service.py` on :8020 |
 | `avatar-sync.js`: audio forwarding and avatar layer | `scripts/wsl/livetalking_cyber_gf.py`: runtime adapter that streams PCM into LiveTalking's frame queue |
 | `start-voice.sh` / `start-livetalking.sh` | `scripts/wsl/start_step12_v2.sh` and `scripts/windows/start_step12_v2.bat` |
-| Voice orb page on :7860 with microphone and VAD | Upload-a-WAV demo page `web/cyber_gf_demo.html` (no microphone or VAD yet) |
+| Voice orb page on :7860 with microphone and VAD | Browser page `web/imood_ai.html` (microphone button or WAV upload; no VAD yet) |
 | Reference voice from the package | `assets/ref.wav` + `config/ref_text.txt` supplied by the project owner |
 
 ## Performance-driven changes
@@ -30,7 +30,7 @@ The package (`install-voice.sh`, `start-voice.sh`, `start-livetalking.sh`, `avat
 | transformers pinned to **5.15.1** in `.venv-tts-fast` (5.17.0 breaks `qwen-tts-hf`: `MimiConfig has no rope_theta`) | [perf_tts_fast.md](perf_tts_fast.md) |
 | Streaming TTS (`chunk_size=8`) into LiveTalking's frame queue instead of posting one WAV per answer | [step12_v2.md](step12_v2.md) |
 | LLM → TTS in **full** mode by default (sentence mode measured slower on a shared GPU) | [step12_v2.md](step12_v2.md) |
-| Demo page: STUN off by default (like upstream `index.html`), ICE gathering capped at 2 s | An unreachable STUN server stalled the connect button for tens of seconds |
+| Frontend page: STUN off by default (like upstream `index.html`), ICE gathering capped at 2 s | An unreachable STUN server stalled the connect button for tens of seconds |
 
 ## Machine setup
 - `.wslconfig` uses the tutorial's values (mirrored networking + `hostAddressLoopback`); see `config/wslconfig.example`.

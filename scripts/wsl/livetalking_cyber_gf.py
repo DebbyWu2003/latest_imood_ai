@@ -10,7 +10,7 @@ few project routes are registered in the same aiohttp app (before upstream's cat
            utterance only, then a trailing zero frame carrying 'end'.
   GET  /cyber_gf/utt/{utt}     per-utterance stats: frames, queue depth, underruns, playback start/end
   GET  /cyber_gf/stats         sessions + queue depth + last LiveTalking infer/final fps
-  GET  /cyber_gf/web/...       project demo page (C:/.../cyber_gf/web)
+  GET  /imood/...              project frontend (C:/.../cyber_gf/web), page /imood/imood_ai.html
 
 Runtime-only instrumentation (no file edits): an instance-level wrapper on avatar_session.asr.get_audio_frame
 counts silence frames (type=1 => mouth closes) that occur *inside* an utterance (= underruns), and a
@@ -210,8 +210,19 @@ async def stats(request):
     sessions = [{"sessionid": sid, "avatar_id": getattr(getattr(s, "opt", None), "avatar_id", ""),
                  "queue_frames": s.asr.queue.qsize(), "speaking": s.is_speaking()}
                 for sid, s in session_manager.sessions.items() if s is not None]
-    return web.json_response({"code": 0, "msg": "ok", "data": {"sessions": sessions, "lt_fps": dict(FPS),
+    return web.json_response({"code": 0, "msg": "ok", "data": {"sessions": sessions, "lt_fps": dict(FPS), "cuda_mem_gb": _cuda_mem(),
                               "recent_utts": [_public(u) for u in list(UTTS.values())[-5:]]}})
+
+
+def _cuda_mem():
+    """This process's PyTorch CUDA memory (GB): what LiveTalking itself holds, as opposed to the whole WSL VM."""
+    try:
+        import torch
+        g = 1 << 30
+        return {"allocated": round(torch.cuda.memory_allocated() / g, 2), "reserved": round(torch.cuda.memory_reserved() / g, 2),
+                "max_allocated": round(torch.cuda.max_memory_allocated() / g, 2), "max_reserved": round(torch.cuda.max_memory_reserved() / g, 2)}
+    except Exception as e:
+        return {"error": str(e)}
 
 
 _orig_setup_routes = lt_routes.setup_routes
@@ -222,8 +233,8 @@ def setup_routes_with_cyber_gf(app):
     app.router.add_post("/cyber_gf/audio_stream", audio_stream)
     app.router.add_get("/cyber_gf/utt/{utt}", utt_status)
     app.router.add_get("/cyber_gf/stats", stats)
-    app.router.add_static("/cyber_gf/web/", path=str(PROJECT / "web"), show_index=False)
-    logger.info("[cyber_gf] adapter routes registered: /cyber_gf/audio_stream, /cyber_gf/utt/{utt}, /cyber_gf/stats, /cyber_gf/web/")
+    app.router.add_static("/imood/", path=str(PROJECT / "web"), show_index=False)
+    logger.info("[cyber_gf] adapter routes registered: /cyber_gf/audio_stream, /cyber_gf/utt/{utt}, /cyber_gf/stats, /imood/")
     _orig_setup_routes(app)
 
 

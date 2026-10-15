@@ -29,5 +29,5 @@
 3. 端到端延遲和總 VRAM 要等第十二步才能量測。
 
 ## Step 12 v2（串流版，2026-09-29）
-✅ 常駐服務 + faster-qwen3-tts 串流 chunk 8 + 專案 adapter（LiveTalking 原始碼未修改）+ 瀏覽器 demo 頁。數字人開始說話平均 3.15 s（MVP 6.91 s），5/5 次 0 欠載、0 溢位，錄影同步。見 `step12_v2.md`。
+✅ 常駐服務 + faster-qwen3-tts 串流 chunk 8 + 專案 adapter（LiveTalking 原始碼未修改）+ 瀏覽器 imood 前端頁。數字人開始說話平均 3.15 s（MVP 6.91 s），5/5 次 0 欠載、0 溢位，錄影同步。見 `step12_v2.md`。
 啟動：`scripts\windows\start_step12_v2.bat` → http://localhost:8010/cyber_gf/web/cyber_gf_demo.html

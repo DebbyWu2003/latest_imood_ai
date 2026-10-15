@@ -79,7 +79,15 @@
     "weights_original_copy": "/root/lt_weights/wav2lip",
     "avatars": {
       "wav2lip256_avatar1": "official sample, data/avatars/wav2lip256_avatar1",
-      "wav2lip256_myavatar": "built from assets/avatar/idle.mp4, data/avatars/wav2lip256_myavatar (81 frames)"
+      "wav2lip256_myavatar": "built from assets/avatar/idle.mp4, data/avatars/wav2lip256_myavatar (81 frames)",
+      "wav2lip256_avatar2": "built from assets/avatar/idle_avatar2.mp4 (Wan2.2 i2v of a new photo, seed 184411290872955; slow blink, superseded)",
+      "wav2lip256_avatar2_one1": "built from assets/avatar/idle_avatar2_one1.mp4 (prompt: one quick blink mid-video, seed 178790083600981); backup",
+      "wav2lip256_avatar2_mA1": "assets/avatar/idle_avatar2_mA1.mp4 (seed 200710509041525); tilted head + smile -> poor wav2lip mouth, kept for comparison",
+      "wav2lip256_avatar2_mB2": "assets/avatar/idle_avatar2_mB2.mp4 (seed 104204800334602); tilted head + smile -> poor wav2lip mouth, kept for comparison",
+      "wav2lip256_avatar3_WA3": "assets/avatar/idle_avatar3_WA3.mp4, 81 frames; DEFAULT since 2026-10-04; white top (assets/avatar/溫暖房間中的黑蝴蝶結少女.png), prompt variant A, seed 139578739261453; one quick blink",
+      "wav2lip256_avatar3_BA3": "assets/avatar/idle_avatar3_BA3.mp4, 81 frames; black top (assets/avatar/暖光黑蝴蝶結少女肖像.png), prompt variant A, seed 235268325865967; two quick blinks",
+      "wav2lip256_avatar3_WA2": "assets/avatar/idle_avatar3_WA2.mp4, 81 frames; white top, prompt variant A, seed 72232846761666",
+      "wav2lip256_avatar3_BA2": "assets/avatar/idle_avatar3_BA2.mp4, 81 frames; black top, prompt variant A, seed 43945414290996"
     },
     "logs": "/root/lt_logs/lt_test.log"
   },
@@ -129,11 +137,11 @@
         "POST /cyber_gf/audio_stream",
         "GET /cyber_gf/utt/{utt}",
         "GET /cyber_gf/stats",
-        "GET /cyber_gf/web/..."
+        "GET /imood/..."
       ],
       "livetalking_source_modified": false
     },
-    "demo_page": "web/cyber_gf_demo.html -> http://localhost:8010/cyber_gf/web/cyber_gf_demo.html",
+    "frontend_page": "web/imood_ai.html -> http://localhost:8010/imood/imood_ai.html",
     "start": "scripts/windows/start_step12_v2.bat",
     "stop": "scripts/windows/stop_step12_v2.bat"
   },

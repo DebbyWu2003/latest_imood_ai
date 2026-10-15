@@ -21,13 +21,13 @@ A fully local voice-to-avatar pipeline. A spoken question (WAV) is transcribed b
    ```bat
    scripts\windows\start_step12_v2.bat
    ```
-   It starts llama-server in its own window (if it isn't already running), starts the LiveTalking adapter and the voice service in Ubuntu-24.04, and opens the demo page.
+   It starts llama-server in its own window (if it isn't already running), starts the LiveTalking adapter and the voice service in Ubuntu-24.04, and opens the imood page.
 2. Wait until the console prints `LiveTalking+adapter: OK` and `voice service: OK`. **The first start loads all models and takes roughly 20–30 s.** Models then stay resident, so later questions don't reload anything.
-3. Open (if it didn't open automatically): **http://localhost:8010/cyber_gf/web/cyber_gf_demo.html**
-4. Click **連線數字人** (connect avatar). The avatar video appears within a few seconds.
-5. Under **AI 對話測試**, choose **`assets/test.wav`**.
-6. Click **送出問題** (send question).
-7. The page shows the state (asr → thinking → synthesizing → speaking → done), the transcript, the LLM reply, and latency metrics. The avatar speaks the reply in the cloned voice.
+3. Open (if it didn't open automatically): **http://localhost:8010/imood/imood_ai.html**
+4. Pick a character and click **開始視訊** (start video). The avatar video appears within a few seconds.
+5. Click the microphone and speak, or choose **`assets/test.wav`** via **上傳 WAV**.
+6. For a WAV file, click **送出檔案** (send file); a recording is sent when you click the microphone again.
+7. The chat shows the state (asr → thinking → synthesizing → speaking → done), the transcript and the LLM reply; latency metrics are under 診斷資訊 → 延遲. The avatar speaks the reply in the cloned voice.
 8. Stop everything (both WSL services and llama-server):
    ```bat
    scripts\windows\stop_step12_v2.bat
@@ -51,7 +51,7 @@ user WAV (browser upload)
  → streaming adapter                        (project-owned, inside the LiveTalking process, :8010)
  → LiveTalking / Wav2Lip                    (avatar wav2lip256_myavatar)
  → WebRTC
- → browser demo page
+ → browser (imood page)
 ```
 **One-time asset preparation**
 ```
@@ -61,7 +61,7 @@ assets/ref.wav + config/ref_text.txt → Qwen3-TTS-12Hz-1.7B-Base voice cloning 
 Details: [docs/architecture.md](docs/architecture.md), [docs/step12_v2.md](docs/step12_v2.md).
 
 ## Requirements / external dependencies
-**In this repo:** integration code, launchers, configs, the demo page, docs, and small assets (reference voice, test question, avatar image, `idle.mp4`).
+**In this repo:** integration code, launchers, configs, the imood frontend page, docs, and small assets (reference voice, test question, avatar image, `idle.mp4`).
 **Not in this repo** (installed separately; paths are configurable, see [Configuration](#configuration)):
 
 | Component | Used here | Default location |
@@ -122,7 +122,7 @@ Tested on the reference machine only. Each step reuses a script from this repo.
 
 **Ports:**
 - 8090: llama-server (Windows)
-- 8010: LiveTalking + adapter + demo page (WSL)
+- 8010: LiveTalking + adapter + imood page (WSL)
 - 8020: voice service (WSL)
 
 **WSL distro:** every launcher uses `wsl -d %WSL_DISTRO%` (default `Ubuntu-24.04`), and the WSL scripts refuse to run anywhere else.
@@ -131,7 +131,7 @@ Tested on the reference machine only. Each step reuses a script from this repo.
 - **Model persistence:** `voice_service.py` loads Faster-Whisper and FasterQwen3TTS once, captures the CUDA graphs, and warms the reference prompt at startup. llama-server and LiveTalking also stay loaded, so each question pays only inference time.
 - **Streaming path:** TTS yields 0.64 s chunks (`chunk_size=8`), which go through **one** stateful `soxr` 24→16 kHz resampler per answer and an in-memory queue. A sender thread streams them as **one chunked HTTP POST per answer** to `/cyber_gf/audio_stream`. Generation never waits for playback.
 - **LiveTalking adapter** (`scripts/wsl/livetalking_cyber_gf.py`):
-  - It runs the **unmodified** LiveTalking `app.py` and registers project routes at startup (`/cyber_gf/audio_stream`, `/cyber_gf/utt/{id}`, `/cyber_gf/stats`, `/cyber_gf/web/`).
+  - It runs the **unmodified** LiveTalking `app.py` and registers project routes at startup (`/cyber_gf/audio_stream`, `/cyber_gf/utt/{id}`, `/cyber_gf/stats`, `/imood/`).
   - It turns the PCM stream into 20 ms frames in LiveTalking's audio queue: one `start` event, one `end` event, the same pattern as LiveTalking's own streaming TTS integration.
   - Frames are enqueued atomically per received block, after a 480 ms pre-roll, which prevents start-of-utterance silence.
   - It reports underruns, queue depth, fps, and actual playback start and end.
@@ -153,7 +153,7 @@ RTX 4090 24 GB, WSL2 Ubuntu-24.04, `assets/test.wav` (3.84 s), 5 consecutive run
 Evidence and method: [docs/step12_v2.md](docs/step12_v2.md), [docs/perf_tts_fast.md](docs/perf_tts_fast.md), [docs/perf_tts_investigation.md](docs/perf_tts_investigation.md).
 
 ## Known issues
-- **Remote-desktop viewing can stutter** even though recordings are smooth and in sync and the server renders a steady 25 fps. The demo page shows live WebRTC receive stats (fps, dropped frames, freezes, jitter) for diagnosis.
+- **Remote-desktop viewing can stutter** even though recordings are smooth and in sync and the server renders a steady 25 fps. The imood page shows live WebRTC receive stats (fps, dropped frames, freezes, jitter) under 診斷資訊 for diagnosis.
 - **VRAM is tight:** the full stack uses about 23.3 of 24 GB. Stop other GPU-heavy services first. On the reference machine that means a CosyVoice TTS on :8001 and an older service on :8000, which start automatically after a reboot or login.
 - **Default WSL distro trap:** the reference machine's default distro is Ubuntu-22.04, where none of the paths exist. Always use `wsl -d Ubuntu-24.04`, which all launchers do.
 - **First start:** the first run after installing downloads the HF models (about 7 GB) if they aren't cached.
@@ -169,7 +169,7 @@ cyber_gf/
 │   ├── windows/              start/stop launchers, llama/ComfyUI starters, MVP launcher, idle.mp4 generator, LLM test, benchmark and download tools
 │   └── wsl/                  voice service, LiveTalking adapter, start/stop, install scripts (LiveTalking, weights, avatar, voice envs), MVP and Step 9 tools
 │       └── perf/             benchmarks and the headless end-to-end test (outputs go to outputs/, gitignored)
-├── web/                      cyber_gf_demo.html (served by the adapter at /cyber_gf/web/)
+├── web/                      imood_ai.html, avatars.json (served by the adapter at /imood/)
 ├── assets/                   ref.wav (voice reference), test.wav (sample question), avatar/ (image + idle.mp4), test_frames/ (evidence images)
 └── docs/                     architecture, Step 12 v2 / MVP / Step 9, TTS performance, components, deviations, progress log
 ```
@@ -191,6 +191,6 @@ cyber_gf/
 ## Further development (not part of the working core)
 - Microphone input and VAD (end-of-speech detection)
 - Interruption / barge-in (LiveTalking already exposes `/interrupt_talk`)
-- UI polish for the demo page
+- UI polish for the imood page
 - More robust service management (health checks, auto-restart, a single supervisor)
 - Reducing LiveTalking's internal ~1.1 s buffering latency

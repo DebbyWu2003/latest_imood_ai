@@ -4,7 +4,7 @@ Current demo: **Step 12 v2**. Full design notes, including LiveTalking source an
 
 ## Runtime (per question)
 ```
- Browser (Windows)  http://localhost:8010/cyber_gf/web/cyber_gf_demo.html
+ Browser (Windows)  http://localhost:8010/imood/imood_ai.html
    │  WebRTC connect: POST /offer → sessionid                    ▲ avatar video + audio (WebRTC, 25 fps)
    │  question WAV:   POST http://localhost:8020/api/ask         │
    ▼                                                              │
@@ -25,7 +25,7 @@ Current demo: **Step 12 v2**. Full design notes, including LiveTalking source an
 |---|---|---|
 | LLM | `llama-server.exe` (Windows) | 8090 |
 | ASR + TTS + orchestration | `scripts/wsl/voice_service.py` (WSL, `.venv-tts-fast`) | 8020 |
-| Lip sync + WebRTC + demo page | `scripts/wsl/livetalking_cyber_gf.py` → LiveTalking `app.py` (WSL, `.venv-lt`) | 8010 |
+| Lip sync + WebRTC + imood page | `scripts/wsl/livetalking_cyber_gf.py` → LiveTalking `app.py` (WSL, `.venv-lt`) | 8010 |
 
 WSL uses mirrored networking (`config/wslconfig.example`), so every component reaches the others via `localhost`.
 

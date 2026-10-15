@@ -36,4 +36,4 @@ done
 curl -s http://localhost:8020/api/health; echo
 [ "$lt" = 1 ] && echo "LiveTalking+adapter: OK  (log $LT_LOG_DIR/lt_cyber_gf.log)" || echo "LiveTalking: NOT READY (see $LT_LOG_DIR/lt_cyber_gf.log)"
 [ "$vs" = 1 ] && echo "voice service:       OK  (log $LOG/voice_service.log)" || echo "voice service: NOT READY (see $LOG/voice_service.log)"
-echo "Open: http://localhost:8010/cyber_gf/web/cyber_gf_demo.html"
+echo "Open: http://localhost:8010/imood/imood_ai.html"

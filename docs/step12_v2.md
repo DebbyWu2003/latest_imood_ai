@@ -2,7 +2,7 @@
 
 ## Architecture
 ```
-Browser  http://localhost:8010/cyber_gf/web/cyber_gf_demo.html   (project page, served by LiveTalking :8010)
+Browser  http://localhost:8010/imood/imood_ai.html   (project page, served by LiveTalking :8010)
   │ ① WebRTC connect (POST /offer → sessionid)             ◄──────────── ⑦ avatar video + audio (WebRTC)
   │ ② question.wav  POST http://localhost:8020/api/ask?sessionid=…   (poll /api/job/<id> for state + metrics)
   ▼
@@ -38,7 +38,7 @@ What was inspected in the installed LiveTalking (commit b3e7490, which is also u
 Chosen approach: **option 2, a project-owned adapter, with no LiveTalking file modified.**
 - `scripts/wsl/livetalking_cyber_gf.py` wraps `server.routes.setup_routes` at runtime (it registers project routes first, because upstream ends with a catch-all static `/`), then runs `app.py` through `runpy` with the same arguments.
 - Repeated `/humanaudio` POSTs were **not** used: every call has its own start/end, and any gap between calls becomes silence frames.
-- Routes added: `POST /cyber_gf/audio_stream`, `GET /cyber_gf/utt/{utt}`, `GET /cyber_gf/stats`, `GET /cyber_gf/web/…` (demo page). All upstream routes and pages are unchanged; `/humanaudio` still works.
+- Routes added: `POST /cyber_gf/audio_stream`, `GET /cyber_gf/utt/{utt}`, `GET /cyber_gf/stats`, `GET /imood/…` (frontend page). All upstream routes and pages are unchanged; `/humanaudio` still works.
 
 Runtime-only hooks inside the adapter (instance-level, no file edits):
 1. **Atomic batch enqueue.** Each received block is enqueued under `asr.queue.mutex`, using the same `AudioFrameData(type=0, userdata=eventpoint)` items that `put_audio_frame()` creates.
@@ -103,7 +103,7 @@ Pause analysis (runs of 20 ms RMS < 0.004 lasting 60 ms or more, inside the answ
 - The recording's video (25 fps) and audio durations match within one frame.
 
 ## Metrics logged per question
-`outputs/step12_v2/<job>/timings.json` (also shown on the demo page):
+`outputs/step12_v2/<job>/timings.json` (also shown in the imood page's 診斷資訊 → 延遲 tab):
 - **Timestamps:**
   - `request_received`, `asr_done`, `llm_first_token`
   - `first_segment_ready`, `tts_first_chunk`
@@ -122,7 +122,7 @@ Pause analysis (runs of 20 ms RMS < 0.004 lasting 60 ms or more, inside the answ
 - **Symptom:** the saved recording is smooth and in sync, but live viewing over a remote desktop sometimes stutters.
 - **Server side is healthy:** LiveTalking final fps is 25.0 and infer fps about 100–115. The headless WebRTC viewer on the same machine receives 25.0–25.1 fps, with max inter-frame intervals of 75–97 ms (a few frames over 60 ms per answer).
 - **Likely cause:** the remote-display path (AnyDesk and the second Windows session also hold GPU memory) and/or browser decode or jitter buffering.
-- **Diagnostics:** the demo page shows live `getStats()` numbers: decoded fps, frames dropped, freeze count and duration, jitter-buffer delay, audio concealed samples. Compare them locally vs over the remote desktop.
+- **Diagnostics:** the imood page (診斷資訊 → WebRTC 接收) shows live `getStats()` numbers: decoded fps, frames dropped, freeze count and duration, jitter-buffer delay, audio concealed samples. Compare them locally vs over the remote desktop.
 
 ## VRAM
 Full system running: **23.3 GB of 24 GB**.
@@ -133,7 +133,7 @@ Full system running: **23.3 GB of 24 GB**.
 On the reference machine, two unrelated GPU services (a CosyVoice TTS on :8001 and a service on :8000) must stay stopped while the demo runs.
 
 ## Start / stop
-- **Start everything:** `scripts\windows\start_step12_v2.bat`. It starts llama-server if it isn't running, starts both WSL services **in Ubuntu-24.04**, waits until they are ready, and opens the demo page.
+- **Start everything:** `scripts\windows\start_step12_v2.bat`. It starts llama-server if it isn't running, starts both WSL services **in Ubuntu-24.04**, waits until they are ready, and opens the imood page.
   - WSL only: `wsl -d Ubuntu-24.04 -- bash <repo-in-wsl>/scripts/wsl/start_step12_v2.sh`
 - **Stop:** `scripts\windows\stop_step12_v2.bat` stops **everything** (both WSL services and llama-server) and prints the remaining VRAM (desktop only, about 1.5 GB).
 - **Logs:** `/root/lt_logs/lt_cyber_gf.log` (LiveTalking + adapter), `logs/voice_service.log`.

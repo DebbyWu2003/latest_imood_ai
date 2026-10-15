@@ -1,6 +1,6 @@
-"""Headless end-to-end check for Step 12 v2 (stand-in for the browser demo page).
+"""Headless end-to-end check for Step 12 v2 (stand-in for the browser frontend).
 
-Connects to LiveTalking over WebRTC exactly like cyber_gf_demo.html (POST /offer), starts LiveTalking's
+Connects to LiveTalking over WebRTC exactly like web/imood_ai.html (POST /offer), starts LiveTalking's
 recorder, submits a question WAV to the voice service (same call the page makes), and records what a
 WebRTC viewer actually receives: 48 kHz audio + video frame arrival times.
 Then reports audible gaps inside the spoken answer, received video fps, and the job metrics.
@@ -42,6 +42,7 @@ async def main():
     ap.add_argument("--mode", default="full")
     ap.add_argument("--in", dest="inp", default=str(ROOT / "assets/test.wav"))
     ap.add_argument("--tag", default="")
+    ap.add_argument("--avatar", default="", help="per-session avatar (LiveTalking /offer option); empty = server default")
     args = ap.parse_args()
 
     pc = RTCPeerConnection()
@@ -67,7 +68,7 @@ async def main():
 
     await pc.setLocalDescription(await pc.createOffer())
     async with aiohttp.ClientSession() as s:
-        ans = await (await s.post(f"{LT}/offer", json={"sdp": pc.localDescription.sdp, "type": pc.localDescription.type})).json()
+        ans = await (await s.post(f"{LT}/offer", json={"sdp": pc.localDescription.sdp, "type": pc.localDescription.type, **({"avatar": args.avatar} if args.avatar else {})})).json()
         sid = ans["sessionid"]
         await pc.setRemoteDescription(RTCSessionDescription(sdp=ans["sdp"], type=ans["type"]))
         for _ in range(100):                                   # wait until media flows

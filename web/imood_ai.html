@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>imood.ai 視訊聊天</title>
+<!--
+  The project's browser frontend. Media (WebRTC) can come from LiveTalking itself or from a separate receiver that speaks the same
+  POST /offer contract - see docs/frontend_v2_interface.md. Endpoints are set in the ⚙ panel or by URL:
+    ?media=http://host:8030   WebRTC offer endpoint base   (default: same origin = LiveTalking :8010)
+    ?control=http://host:8010 LiveTalking base for /sse, /record (default: same origin)
+    ?voice=http://host:8020   voice service base           (default: this host :8020)
+    ?stun=1                   use a public STUN server
+-->
+<style>
+  :root {
+    --bg:#f7f2ec; --surface:#ffffff; --surface-2:#fbf7f3; --ink:#2b2333; --muted:#8b8094; --line:#ece3da;
+    --accent:#ff6b5b; --accent-ink:#ffffff; --violet:#7b5cff; --ok:#1fa971; --warn:#e8a317; --err:#e5484d;
+    --stage:linear-gradient(155deg,#ffd8c6 0%,#f3d6ff 55%,#d9dcff 100%);
+    --shadow:0 18px 40px -18px rgba(70,40,90,.35); --radius:26px;
+  }
+  * { box-sizing:border-box; }
+  html, body { height:100%; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+    font:15px/1.55 "Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif; }
+  button { font:inherit; color:inherit; cursor:pointer; border:0; background:none; }
+  button:disabled { opacity:.4; cursor:default; }
+  svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+
+  /* ---- top bar */
+  .topbar { height:64px; padding:0 22px; display:flex; align-items:center; gap:16px; }
+  .brand { display:flex; align-items:center; gap:10px; margin-right:auto; }
+  .logo { width:36px; height:36px; border-radius:12px; display:grid; place-items:center; color:#fff;
+    background:linear-gradient(135deg,var(--accent),var(--violet)); font-size:18px; }
+  .brand b { display:block; font-size:16px; letter-spacing:.3px; }
+  .brand small { color:var(--muted); font-size:12px; }
+  .pill { display:flex; align-items:center; gap:8px; padding:6px 14px; border-radius:999px; background:var(--surface);
+    border:1px solid var(--line); font-size:13px; color:var(--muted); }
+  .pill i { width:8px; height:8px; border-radius:50%; background:#c9bfd0; }
+  .pill[data-state=connecting] i { background:var(--warn); animation:blink 1s infinite; }
+  .pill[data-state=live] i { background:var(--ok); box-shadow:0 0 0 4px rgba(31,169,113,.18); }
+  .pill[data-state=error] i { background:var(--err); }
+  .icon-btn { width:40px; height:40px; border-radius:14px; display:grid; place-items:center; background:var(--surface);
+    border:1px solid var(--line); color:var(--ink); }
+  .icon-btn:hover { border-color:#d9cdc1; }
+
+  /* ---- layout */
+  .app { height:calc(100% - 64px); padding:0 22px 22px; display:grid; gap:22px;
+    grid-template-columns:minmax(0,1fr) minmax(340px,430px); }
+  @media (max-width: 900px) {
+    .app { height:auto; grid-template-columns:1fr; padding:0 16px 16px; }
+    .topbar { padding:0 16px; }
+    .pill span { display:none; }
+  }
+
+  /* ---- stage (avatar video) */
+  .screen { position:relative; height:100%; min-height:420px; border-radius:var(--radius); overflow:hidden;
+    background:var(--stage); box-shadow:var(--shadow); }
+  @media (max-width: 900px) { .screen { height:min(72vh,620px); } }
+  .screen video { position:absolute; inset:0; width:100%; height:100%; object-fit:contain; opacity:0; transition:opacity .4s; }
+  .screen[data-live="1"] video { opacity:1; }
+  .placeholder { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:18px; padding:24px; text-align:center; transition:opacity .3s; }
+  .screen[data-live="1"] .placeholder { opacity:0; pointer-events:none; }
+  .orb { width:120px; height:120px; border-radius:50%; background:radial-gradient(circle at 35% 30%,#fff,#ffc2b4 45%,#b9a3ff);
+    box-shadow:0 0 0 14px rgba(255,255,255,.35),0 0 0 30px rgba(255,255,255,.18); animation:breathe 3.2s ease-in-out infinite; }
+  .placeholder h2 { margin:6px 0 0; font-size:22px; }
+  .placeholder p { margin:0; color:#6f6378; }
+  .chips { display:flex; flex-wrap:wrap; gap:8px; justify-content:center; max-width:520px; }
+  .chip-btn { padding:8px 16px; border-radius:999px; background:rgba(255,255,255,.65); border:1px solid rgba(255,255,255,.9);
+    backdrop-filter:blur(6px); font-size:14px; }
+  .chip-btn[aria-pressed=true] { background:var(--ink); color:#fff; border-color:var(--ink); }
+
+  .tags { position:absolute; top:16px; left:16px; display:flex; gap:8px; }
+  .tag { padding:4px 10px; border-radius:999px; font-size:12px; background:rgba(20,12,30,.55); color:#fff; backdrop-filter:blur(6px); }
+  .tag.live { background:var(--err); font-weight:700; letter-spacing:.5px; }
+  .tag.rec { background:#fff; color:var(--err); font-weight:700; }
+
+  .dock { position:absolute; left:50%; bottom:20px; transform:translateX(-50%); display:flex; align-items:center; gap:12px;
+    padding:10px; border-radius:999px; background:rgba(255,255,255,.72); backdrop-filter:blur(10px); box-shadow:var(--shadow); }
+  .call { height:52px; padding:0 26px; border-radius:999px; background:var(--ok); color:#fff; font-weight:700;
+    display:flex; align-items:center; gap:8px; }
+  .call.hang { background:var(--err); }
+  .round { width:52px; height:52px; border-radius:50%; display:grid; place-items:center; background:var(--surface); border:1px solid var(--line); }
+  .round.on { background:var(--err); color:#fff; border-color:var(--err); }
+  .dock a { font-size:13px; color:var(--violet); padding-right:10px; white-space:nowrap; }
+
+  /* ---- chat */
+  .chat { display:flex; flex-direction:column; min-height:0; background:var(--surface); border-radius:var(--radius);
+    border:1px solid var(--line); overflow:hidden; }
+  @media (max-width: 900px) { .chat { min-height:70vh; } }
+  .chat-head { display:flex; align-items:center; justify-content:space-between; padding:16px 18px 12px; border-bottom:1px solid var(--line); }
+  .chat-head h2 { margin:0; font-size:17px; }
+  .seg { display:flex; padding:3px; border-radius:12px; background:var(--surface-2); border:1px solid var(--line); }
+  .seg button { padding:5px 12px; border-radius:9px; font-size:13px; color:var(--muted); }
+  .seg button[aria-pressed=true] { background:var(--surface); color:var(--ink); box-shadow:0 1px 3px rgba(0,0,0,.1); font-weight:600; }
+
+  .thread { flex:1; overflow:auto; list-style:none; margin:0; padding:18px; display:flex; flex-direction:column; gap:14px; }
+  .thread .empty { margin:auto; text-align:center; color:var(--muted); font-size:14px; }
+  .msg { max-width:86%; display:flex; flex-direction:column; gap:4px; }
+  .msg.me { align-self:flex-end; align-items:flex-end; }
+  .bubble { padding:10px 14px; border-radius:20px; white-space:pre-wrap; word-break:break-word; }
+  .me .bubble { background:var(--ink); color:#fff; border-bottom-right-radius:6px; }
+  .her .bubble { background:var(--surface-2); border:1px solid var(--line); border-bottom-left-radius:6px; }
+  .meta { font-size:12px; color:var(--muted); display:flex; gap:8px; align-items:center; }
+  .state { padding:1px 8px; border-radius:999px; background:#efe8f7; color:var(--violet); font-weight:600; }
+  .state.done { background:#e3f6ee; color:var(--ok); } .state.error { background:#fde8e8; color:var(--err); }
+  .dots { display:inline-flex; gap:4px; padding:4px 0; }
+  .dots i { width:7px; height:7px; border-radius:50%; background:#b9adc4; animation:hop 1.1s infinite; }
+  .dots i:nth-child(2) { animation-delay:.15s; } .dots i:nth-child(3) { animation-delay:.3s; }
+
+  .composer { border-top:1px solid var(--line); padding:14px 18px 16px; display:grid; gap:10px;
+    grid-template-columns:1fr auto 1fr; align-items:center; }
+  .attach { display:flex; align-items:center; gap:6px; font-size:13px; color:var(--muted); cursor:pointer; min-width:0; }
+  .attach span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .attach:hover { color:var(--ink); }
+  .mic { width:68px; height:68px; border-radius:50%; display:grid; place-items:center; color:#fff;
+    background:linear-gradient(135deg,var(--accent),var(--violet)); box-shadow:0 10px 24px -8px rgba(255,107,91,.7); position:relative; }
+  .mic svg { width:28px; height:28px; }
+  .mic.on { background:var(--err); }
+  .mic.on::after { content:""; position:absolute; inset:-8px; border-radius:50%; border:3px solid var(--err); animation:ring 1.2s infinite; }
+  .send { justify-self:end; padding:8px 14px; border-radius:12px; background:var(--surface-2); border:1px solid var(--line); font-size:13px; }
+  .mic-info { grid-column:1 / -1; margin:0; text-align:center; font-size:12px; color:var(--muted); min-height:1.5em; }
+
+  /* ---- drawers */
+  .scrim { position:fixed; inset:0; background:rgba(30,20,40,.3); opacity:0; pointer-events:none; transition:opacity .25s; }
+  .scrim.on { opacity:1; pointer-events:auto; }
+  .drawer { position:fixed; top:0; right:0; height:100%; width:min(420px,100%); background:var(--surface);
+    box-shadow:-20px 0 40px -20px rgba(40,20,60,.35); transform:translateX(105%); transition:transform .28s ease;
+    display:flex; flex-direction:column; }
+  .drawer.on { transform:none; }
+  .drawer header { display:flex; align-items:center; justify-content:space-between; padding:18px 20px; border-bottom:1px solid var(--line); }
+  .drawer header h3 { margin:0; font-size:17px; }
+  .drawer .body { flex:1; overflow:auto; padding:16px 20px 24px; }
+  .tabs { display:flex; gap:6px; margin-bottom:14px; }
+  .tabs button { padding:6px 12px; border-radius:10px; font-size:13px; color:var(--muted); background:var(--surface-2); }
+  .tabs button[aria-selected=true] { background:var(--ink); color:#fff; }
+  .kv { width:100%; border-collapse:collapse; font-size:13px; font-variant-numeric:tabular-nums; }
+  .kv td { padding:7px 4px; border-bottom:1px dashed var(--line); } .kv td:last-child { text-align:right; font-weight:600; }
+  .kv .none td { color:var(--muted); font-weight:400; text-align:left; }
+  #log { margin:0; font:12px/1.5 ui-monospace,Consolas,monospace; color:#5d5266; white-space:pre-wrap; }
+  .field { display:grid; gap:6px; margin-bottom:16px; font-size:14px; }
+  .field small { color:var(--muted); font-size:12px; }
+  .field input[type=text], .field select { padding:9px 12px; border-radius:12px; border:1px solid var(--line); background:var(--surface-2);
+    font:inherit; color:inherit; }
+  .switch { display:flex; align-items:center; gap:10px; font-size:14px; margin-bottom:16px; }
+  .primary { width:100%; padding:11px; border-radius:14px; background:var(--ink); color:#fff; font-weight:700; }
+  .sid { font:12px ui-monospace,Consolas,monospace; color:var(--muted); word-break:break-all; }
+
+  @keyframes blink { 50% { opacity:.3; } }
+  @keyframes breathe { 50% { transform:scale(1.06); } }
+  @keyframes hop { 0%,60%,100% { transform:none; opacity:.5; } 30% { transform:translateY(-4px); opacity:1; } }
+  @keyframes ring { from { transform:scale(.9); opacity:.9; } to { transform:scale(1.25); opacity:0; } }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><div class="logo">✦</div><div><b>imood.ai</b><small>即時視訊聊天</small></div></div>
+  <div class="pill" id="pill" data-state="idle"><i></i><span id="pillText">尚未連線</span></div>
+  <button class="icon-btn" id="openDiag" title="診斷資訊">
+    <svg viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg></button>
+  <button class="icon-btn" id="openSettings" title="設定">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
+</header>
+
+<main class="app">
+  <section class="screen" id="screen" data-live="0">
+    <video id="video" autoplay playsinline muted></video>
+    <audio id="audio" autoplay></audio>
+    <div class="placeholder">
+      <div class="orb"></div>
+      <h2>嗨，想跟誰聊聊？</h2>
+      <p>選一個角色，按下「開始視訊」</p>
+      <div class="chips" id="avatarChips"></div>
+    </div>
+    <div class="tags"><span class="tag live" id="tagLive" hidden>LIVE</span><span class="tag rec" id="tagRec" hidden>● REC</span></div>
+    <div class="dock">
+      <button class="call" id="btnCall">
+        <svg viewBox="0 0 24 24"><path d="M15 10l5-3v10l-5-3z"/><rect x="3" y="6" width="12" height="12" rx="2"/></svg>
+        <span id="callText">開始視訊</span></button>
+      <button class="round" id="btnRec" title="錄影（LiveTalking 錄製）" disabled>
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6" fill="currentColor" stroke="none"/></svg></button>
+      <a id="recLink" href="#" target="_blank" hidden>下載錄影</a>
+    </div>
+  </section>
+
+  <section class="chat">
+    <div class="chat-head">
+      <h2>對話</h2>
+      <div class="seg" id="modeSeg" title="LLM→TTS 模式">
+        <button data-mode="full" aria-pressed="true">整段</button>
+        <button data-mode="sentence" aria-pressed="false">逐句</button>
+      </div>
+    </div>
+    <ol class="thread" id="thread"><li class="empty">開始視訊後，按下麥克風跟她說話吧</li></ol>
+    <div class="composer">
+      <label class="attach" title="或上傳 16 kHz WAV 問題檔">
+        <svg viewBox="0 0 24 24"><path d="M21 12.5l-8.6 8.6a5 5 0 0 1-7.1-7.1l8.6-8.6a3.3 3.3 0 0 1 4.7 4.7l-8.6 8.6a1.7 1.7 0 0 1-2.4-2.4l7.9-7.9"/></svg>
+        <span id="fileName">上傳 WAV</span>
+        <input type="file" id="wavFile" accept=".wav,audio/wav" hidden></label>
+      <button class="mic" id="btnMic" title="點一下開始說話，再點一下送出" disabled>
+        <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
+      <button class="send" id="btnSend" disabled>送出檔案</button>
+      <p class="mic-info" id="micInfo">開始視訊後即可說話</p>
+    </div>
+  </section>
+</main>
+
+<div class="scrim" id="scrim"></div>
+
+<aside class="drawer" id="diag" aria-label="診斷資訊">
+  <header><h3>診斷資訊</h3><button class="icon-btn" data-close title="關閉"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
+  <div class="body">
+    <p class="sid">session: <span id="sid">—</span> · WebRTC: <span id="pcState">—</span></p>
+    <div class="tabs" role="tablist">
+      <button role="tab" data-tab="tabStats" aria-selected="true">WebRTC 接收</button>
+      <button role="tab" data-tab="tabLatency" aria-selected="false">延遲</button>
+      <button role="tab" data-tab="tabLog" aria-selected="false">紀錄</button>
+    </div>
+    <div id="tabStats"><table class="kv" id="rtcStats"><tr class="none"><td>連線後顯示</td></tr></table></div>
+    <div id="tabLatency" hidden><p class="field"><small>最近一次問答，秒數從收到請求起算</small></p>
+      <table class="kv" id="metrics"><tr class="none"><td>尚無資料</td></tr></table></div>
+    <div id="tabLog" hidden><pre id="log"></pre></div>
+  </div>
+</aside>
+
+<aside class="drawer" id="settings" aria-label="設定">
+  <header><h3>設定</h3><button class="icon-btn" data-close title="關閉"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
+  <div class="body">
+    <label class="field">角色<select id="avatar"></select><small>視訊中切換會自動重新連線</small></label>
+    <label class="switch"><input type="checkbox" id="useStun"> 使用 STUN（遠端／跨網段才需要）</label>
+    <label class="field">影像來源（WebRTC /offer）<input type="text" id="cfgMedia" placeholder="留空 = 本頁同源（LiveTalking :8010）">
+      <small>例如另開的 RTP 接收端：http://localhost:8030</small></label>
+    <label class="field">LiveTalking 控制（/sse、/record）<input type="text" id="cfgControl" placeholder="留空 = 本頁同源"></label>
+    <label class="field">語音服務<input type="text" id="cfgVoice"><small>預設為本機 :8020</small></label>
+    <button class="primary" id="btnApply">套用</button>
+  </div>
+</aside>
+
+<!-- Simplified -> Traditional (Taiwan phrasing) for displayed ASR/LLM text only; if it fails to load, text shows as-is -->
+<script src="https://cdn.jsdelivr.net/npm/opencc-js@1.0.5/dist/umd/cn2t.js"></script>
+<script>
+const toTW = (() => { try { return OpenCC.Converter({ from: 'cn', to: 'twp' }); } catch { return s => s; } })();
+const $ = id => document.getElementById(id);
+const log = m => { $('log').textContent = `${new Date().toLocaleTimeString()}  ${m}\n` + $('log').textContent; };
+const store = { get(k, d) { try { return localStorage.getItem(k) ?? d; } catch { return d; } },
+                set(k, v) { try { localStorage.setItem(k, v); } catch {} } };
+
+// ---- endpoints: URL query > saved settings > defaults (see header comment / docs/frontend_v2_interface.md)
+const CFG_KEY = 'cyber_gf_chat_cfg';
+const cfg = (() => {
+  let saved = {}; try { saved = JSON.parse(store.get(CFG_KEY, '{}')); } catch {}
+  const q = new URLSearchParams(location.search);
+  const pick = (k, d) => q.has(k) ? q.get(k) : (saved[k] ?? d);
+  return { media: pick('media', ''), control: pick('control', ''),
+           voice: pick('voice', `${location.protocol}//${location.hostname}:8020`),
+           stun: q.has('stun') ? q.get('stun') === '1' : !!saved.stun };
+})();
+const base = u => (u || '').trim().replace(/\/+$/, '');
+
+let pc = null, sessionid = null, es = null, recording = false, statTimer = null, prevStats = {}, busy = false, mode = 'full';
+
+// ---- connection UI
+function setConn(state, text) {
+  $('pill').dataset.state = state; $('pillText').textContent = text;
+  const live = state === 'live';
+  $('screen').dataset.live = live ? '1' : '0'; $('tagLive').hidden = !live;
+  $('btnCall').classList.toggle('hang', state === 'live' || state === 'connecting');
+  $('callText').textContent = { idle: '開始視訊', error: '重新連線', connecting: '連線中…', live: '結束視訊' }[state];
+  $('btnRec').disabled = !live;
+  refreshAskButtons();
+  $('micInfo').textContent = live ? '點麥克風開始說話，再點一下送出' : '開始視訊後即可說話';
+}
+const refreshAskButtons = () => {
+  const ok = pc?.connectionState === 'connected' && !busy;
+  $('btnMic').disabled = !ok && !mic; $('btnSend').disabled = !ok || !$('wavFile').files[0];
+};
+
+// ---- WebRTC: LiveTalking's negotiation (POST /offer -> {sdp,type,sessionid}); the media base may be another receiver
+async function connect() {
+  const rtc = { sdpSemantics: 'unified-plan' };
+  if (cfg.stun) rtc.iceServers = [{ urls: 'stun:stun.l.google.com:19302' }];
+  pc = new RTCPeerConnection(rtc);
+  pc.addEventListener('track', e => { (e.track.kind === 'video' ? $('video') : $('audio')).srcObject = e.streams[0]; });
+  pc.addEventListener('connectionstatechange', () => {
+    if (!pc) return;
+    $('pcState').textContent = pc.connectionState;
+    if (pc.connectionState === 'connected') setConn('live', '視訊中');
+    else if (pc.connectionState === 'failed') setConn('error', '連線失敗');
+    else if (pc.connectionState === 'disconnected') setConn('connecting', '連線不穩，重試中…');
+  });
+  pc.addTransceiver('video', { direction: 'recvonly' });
+  pc.addTransceiver('audio', { direction: 'recvonly' });
+  setConn('connecting', '連線中…'); log(`connecting via ${base(cfg.media) || location.origin}…`);
+  await pc.setLocalDescription(await pc.createOffer());
+  // wait for ICE gathering, but never more than 2 s (an unreachable STUN server can otherwise stall for tens of seconds)
+  await new Promise(r => { if (pc.iceGatheringState === 'complete') return r();
+    pc.addEventListener('icegatheringstatechange', () => pc?.iceGatheringState === 'complete' && r());
+    setTimeout(r, 2000); });
+  const avatar = $('avatar').value;
+  const res = await fetch(`${base(cfg.media)}/offer`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sdp: pc.localDescription.sdp, type: pc.localDescription.type, ...(avatar && { avatar }) }) });
+  const ans = await res.json();
+  if (!ans.sdp) throw new Error(ans.msg || `offer failed (HTTP ${res.status})`);
+  sessionid = ans.sessionid; $('sid').textContent = sessionid;
+  await pc.setRemoteDescription({ sdp: ans.sdp, type: ans.type });
+  log(`connected, session ${sessionid} (${avatar || 'server default avatar'})`);
+  statTimer = setInterval(rtcStats, 1000);
+  es = new EventSource(`${base(cfg.control)}/sse?sessionid=${sessionid}`);   // LiveTalking playback events (log only)
+  es.onmessage = e => { try { const m = JSON.parse(e.data); if (m.cyber_gf_utt) log(`LiveTalking playback ${m.status}`); } catch {} };
+  es.onerror = () => { es?.close(); es = null; };
+}
+function disconnect(state = 'idle', text = '尚未連線') {
+  if (mic) mic.rec.stop();
+  if (recording) toggleRecord();
+  es?.close(); es = null;
+  const old = pc; pc = null; old?.close();
+  sessionid = null; clearInterval(statTimer); prevStats = {};
+  $('sid').textContent = '—'; $('pcState').textContent = 'closed';
+  setConn(state, text);
+}
+const doConnect = () => connect().catch(e => { log(`connect failed: ${e}`); disconnect('error', '連線失敗'); toast(`連線失敗：${e.message || e}`); });
+$('btnCall').onclick = () => pc ? disconnect() : doConnect();
+
+// ---- WebRTC receive stats (remote-viewing stutter diagnosis)
+async function rtcStats() {
+  if (!pc) return;
+  const rows = [];
+  (await pc.getStats()).forEach(s => {
+    if (s.type !== 'inbound-rtp') return;
+    prevStats[s.id] = s;
+    if (s.kind === 'video') {
+      const jb = s.jitterBufferEmittedCount ? (1000 * s.jitterBufferDelay / s.jitterBufferEmittedCount).toFixed(0) : '—';
+      rows.push(['影像 fps（解碼）', s.framesPerSecond ?? '—'], ['影像掉幀', s.framesDropped ?? 0],
+                ['影像凍結次數 / 總秒數', `${s.freezeCount ?? 0} / ${(s.totalFreezesDuration ?? 0).toFixed(2)}`],
+                ['影像 jitter buffer ms', jb], ['影像遺失封包', s.packetsLost ?? 0]);
+    } else {
+      rows.push(['聲音補償樣本', s.concealedSamples ?? 0], ['聲音 jitter ms', ((s.jitter ?? 0) * 1000).toFixed(1)]);
+    }
+  });
+  fillTable('rtcStats', rows, '等待資料…');
+}
+function fillTable(id, rows, empty) {
+  const t = $(id); t.replaceChildren();
+  if (!rows.length) rows = [[empty]];
+  for (const r of rows) {
+    const tr = t.insertRow(); if (r.length === 1) tr.className = 'none';
+    r.forEach(c => tr.insertCell().textContent = c ?? '—');
+  }
+}
+
+// ---- recording (LiveTalking /record API)
+async function toggleRecord() {
+  recording = !recording;
+  const sid = sessionid;
+  $('btnRec').classList.toggle('on', recording); $('tagRec').hidden = !recording;
+  try {
+    await fetch(`${base(cfg.control)}/record`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: recording ? 'start_record' : 'end_record', sessionid: sid }) });
+  } catch (e) { log(`record request failed: ${e}`); }
+  if (!recording && sid) { $('recLink').href = `${base(cfg.control)}/record/${sid}`; $('recLink').hidden = false; }
+  log(recording ? 'recording…' : 'recording saved');
+}
+$('btnRec').onclick = toggleRecord;
+
+// ---- microphone: MediaRecorder -> decode -> 16 kHz mono 16-bit WAV (same format as assets/test.wav)
+let mic = null;   // { rec, chunks, t0, timer } while recording
+async function toggleMic() {
+  if (mic) { mic.rec.stop(); return; }
+  if (!navigator.mediaDevices?.getUserMedia) return toast('此瀏覽器環境無法使用麥克風（需 https 或 localhost）。');
+  let stream;
+  $('btnMic').disabled = true;   // block double-clicks while the permission prompt is open
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } });
+  } catch (e) { log(`mic denied: ${e}`); refreshAskButtons(); return toast(`無法取得麥克風：${e.message || e}`); }
+  const rec = new MediaRecorder(stream);
+  mic = { rec, chunks: [], t0: Date.now() };
+  rec.ondataavailable = e => e.data.size && mic.chunks.push(e.data);
+  rec.onstop = async () => {
+    const { chunks, t0, timer } = mic; clearInterval(timer);
+    stream.getTracks().forEach(t => t.stop()); mic = null;
+    $('btnMic').classList.remove('on'); refreshAskButtons();
+    const secs = (Date.now() - t0) / 1000;
+    if (secs < 0.5) { $('micInfo').textContent = '錄音太短，再試一次'; return; }
+    try {
+      const wav = await toWav16k(new Blob(chunks, { type: rec.mimeType }));
+      log(`mic recorded ${secs.toFixed(1)} s (${wav.size} B WAV)`);
+      if (pc?.connectionState === 'connected') ask(wav, `🎙 ${secs.toFixed(1)} 秒語音`);
+      else $('micInfo').textContent = '視訊未連線，錄音未送出';
+    } catch (e) { log(`mic encode failed: ${e}`); $('micInfo').textContent = `錄音轉檔失敗：${e}`; }
+  };
+  rec.start();
+  mic.timer = setInterval(() => $('micInfo').textContent = `聆聽中… ${((Date.now() - mic.t0) / 1000).toFixed(1)} 秒，再點一下送出`, 100);
+  $('btnMic').disabled = false; $('btnMic').classList.add('on'); log('mic recording…');
+}
+async function toWav16k(blob) {
+  const ctx = new AudioContext();
+  const src = await ctx.decodeAudioData(await blob.arrayBuffer()); ctx.close();
+  const off = new OfflineAudioContext(1, Math.ceil(src.duration * 16000), 16000);   // resample + downmix
+  const node = off.createBufferSource(); node.buffer = src; node.connect(off.destination); node.start();
+  const pcm = (await off.startRendering()).getChannelData(0);
+  const v = new DataView(new ArrayBuffer(44 + pcm.length * 2));
+  const str = (o, s) => [...s].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
+  str(0, 'RIFF'); v.setUint32(4, 36 + pcm.length * 2, true); str(8, 'WAVEfmt ');
+  v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, 16000, true); v.setUint32(28, 32000, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+  str(36, 'data'); v.setUint32(40, pcm.length * 2, true);
+  pcm.forEach((x, i) => v.setInt16(44 + i * 2, Math.max(-1, Math.min(1, x)) * 0x7fff, true));
+  return new Blob([v], { type: 'audio/wav' });
+}
+$('btnMic').onclick = toggleMic;
+$('wavFile').onchange = () => { $('fileName').textContent = $('wavFile').files[0]?.name || '上傳 WAV'; refreshAskButtons(); };
+$('btnSend').onclick = () => { const f = $('wavFile').files[0]; if (f) ask(f, `📎 ${f.name}`); };
+
+// ---- mode (LLM -> TTS): full | sentence
+$('modeSeg').onclick = e => {
+  const b = e.target.closest('button'); if (!b) return;
+  mode = b.dataset.mode;
+  $('modeSeg').querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b));
+};
+
+// ---- ask: POST voice /api/ask -> poll /api/job/<id>; shown as a chat exchange
+const STATES = { queued: '排隊中', asr: '聽寫中', thinking: '思考中', synthesizing: '準備開口', speaking: '說話中', done: '完成', error: '錯誤' };
+const LABELS = { request_received: '收到請求', asr_done: 'ASR 完成', llm_first_token: 'LLM 第一個字',
+  first_segment_ready: '第一段文字可合成', tts_first_chunk: 'TTS 第一塊音訊', first_audio_submitted: '第一筆音訊送出',
+  first_frame_put_livetalking: 'LiveTalking 收到第一幀', avatar_speaking_start: '數字人開始說話',
+  llm_done: 'LLM 完成', tts_done: 'TTS 完成', audio_stream_closed: '音訊串流結束', avatar_speaking_end: '數字人說完' };
+
+function addMsg(who) {
+  $('thread').querySelector('.empty')?.remove();
+  const li = document.createElement('li'); li.className = `msg ${who}`;
+  li.innerHTML = '<div class="bubble"></div><div class="meta"></div>';
+  $('thread').append(li); li.scrollIntoView({ block: 'end', behavior: 'smooth' });
+  return { bubble: li.firstChild, meta: li.lastChild };
+}
+const dots = () => { const s = document.createElement('span'); s.className = 'dots'; s.innerHTML = '<i></i><i></i><i></i>'; return s; };
+
+async function ask(audio, label) {
+  busy = true; refreshAskButtons();
+  const me = addMsg('me'), her = addMsg('her');
+  me.bubble.textContent = label; me.meta.textContent = '辨識中…';
+  her.bubble.replaceChildren(dots());
+  const tag = document.createElement('span'); her.meta.append(tag);
+  const setState = s => { tag.textContent = STATES[s] || s; tag.className = `state ${s}`; };
+  setState('queued');
+  const finish = () => { busy = false; refreshAskButtons(); if (pc?.connectionState === 'connected') $('micInfo').textContent = '點麥克風開始說話，再點一下送出'; };
+  let r;
+  try {
+    r = await (await fetch(`${base(cfg.voice)}/api/ask?sessionid=${sessionid}&mode=${mode}`, { method: 'POST', body: audio })).json();
+    if (!r.job) throw new Error(r.error || 'no job id');
+  } catch (e) { setState('error'); her.bubble.textContent = `語音服務無法使用（${base(cfg.voice)}）`; log(`voice service error: ${e}`); return finish(); }
+  log(`job ${r.job}`);
+  // sequential polling (one request in flight at a time, every 200 ms)
+  for (let fails = 0; ; await new Promise(res => setTimeout(res, 200))) {
+    let j;
+    try { j = await (await fetch(`${base(cfg.voice)}/api/job/${r.job}`)).json(); fails = 0; }
+    catch (e) { if (++fails > 25) { setState('error'); log(`job poll failed: ${e}`); return finish(); } continue; }
+    setState(j.state);
+    if (j.transcript) { me.bubble.textContent = toTW(j.transcript); me.meta.textContent = label; }
+    if (j.reply) her.bubble.textContent = toTW(j.reply);
+    const ts = j.timestamps_s || {};
+    if (ts.avatar_speaking_start != null && !her.meta.querySelector('.lat')) {
+      const s = document.createElement('span'); s.className = 'lat'; s.textContent = `${ts.avatar_speaking_start.toFixed(2)} 秒開口`; her.meta.append(s);
+    }
+    const rows = Object.entries(ts).sort((a, b) => a[1] - b[1]).map(([k, v]) => [LABELS[k] || k, v.toFixed(3)]);
+    const m = j.metrics || {};
+    if (j.state === 'done') rows.push(['音訊長度 s', m.audio_s_sent_16k], ['TTS chunks', m.tts_chunks], ['TTS 段數', m.tts_segments],
+      ['LiveTalking 佇列最大 (幀)', m.lt_max_queue_frames], ['欠載 underruns / 幀', `${m.lt_underruns} / ${m.lt_underrun_frames}`],
+      ['溢位 overflows', m.lt_overflows], ['LiveTalking fps (infer / final)', m.lt_fps ? `${m.lt_fps.infer ?? '—'} / ${m.lt_fps.final ?? '—'}` : '—']);
+    fillTable('metrics', rows, '尚無資料');
+    if (j.state === 'done' || j.state === 'error') {
+      if (j.error) { log(`error: ${j.error}`); if (!j.reply) her.bubble.textContent = j.error; }
+      else log(`done → ${m.output_dir || ''}`);
+      if (!j.transcript) me.meta.textContent = label;
+      return finish();
+    }
+  }
+}
+
+// ---- avatars (web/avatars.json): chips on the stage + select in settings; switching while connected reconnects
+async function loadAvatars() {
+  let list = [];
+  try { list = (await (await fetch('avatars.json', { cache: 'no-store' })).json()).avatars || []; }
+  catch (e) { log(`avatars.json not loaded (${e}); using server default`); }
+  const all = [{ id: '', label: '伺服器預設' }, ...list];
+  $('avatar').replaceChildren(...all.map(a => new Option(a.label, a.id)));
+  $('avatarChips').replaceChildren(...all.map(a => {
+    const b = document.createElement('button'); b.className = 'chip-btn'; b.textContent = a.label; b.dataset.id = a.id;
+    b.onclick = () => chooseAvatar(a.id); return b;
+  }));
+  const saved = store.get('cyber_gf_avatar', '');
+  selectAvatar(list.some(a => a.id === saved) ? saved : (list[0]?.id || ''));
+}
+function selectAvatar(id) {
+  $('avatar').value = id;
+  $('avatarChips').querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', b.dataset.id === id));
+}
+function chooseAvatar(id) {
+  if (id === $('avatar').value) return;
+  selectAvatar(id); store.set('cyber_gf_avatar', id);
+  if (pc) { log(`switching avatar -> ${id || 'server default'}`); disconnect(); doConnect(); }
+}
+
+// ---- drawers
+function openDrawer(id) { closeDrawers(); $(id).classList.add('on'); $('scrim').classList.add('on'); }
+function closeDrawers() { document.querySelectorAll('.drawer.on').forEach(d => d.classList.remove('on')); $('scrim').classList.remove('on'); }
+$('openDiag').onclick = () => openDrawer('diag');
+$('openSettings').onclick = () => {
+  $('useStun').checked = cfg.stun; $('cfgMedia').value = cfg.media; $('cfgControl').value = cfg.control; $('cfgVoice').value = cfg.voice;
+  openDrawer('settings');
+};
+$('scrim').onclick = closeDrawers;
+document.querySelectorAll('[data-close]').forEach(b => b.onclick = closeDrawers);
+document.addEventListener('keydown', e => e.key === 'Escape' && closeDrawers());
+document.querySelector('.tabs').onclick = e => {
+  const b = e.target.closest('button'); if (!b) return;
+  document.querySelectorAll('.tabs button').forEach(x => { x.setAttribute('aria-selected', x === b); $(x.dataset.tab).hidden = x !== b; });
+};
+$('btnApply').onclick = () => {
+  const avatar = $('avatar').value, avatarChanged = avatar !== store.get('cyber_gf_avatar', '');
+  const reconnect = pc && (avatarChanged || cfg.media !== $('cfgMedia').value.trim() || cfg.stun !== $('useStun').checked);
+  Object.assign(cfg, { media: $('cfgMedia').value.trim(), control: $('cfgControl').value.trim(),
+                       voice: $('cfgVoice').value.trim(), stun: $('useStun').checked });
+  store.set(CFG_KEY, JSON.stringify(cfg));
+  closeDrawers(); log(`settings: media=${cfg.media || '(same origin)'} control=${cfg.control || '(same origin)'} voice=${cfg.voice} stun=${cfg.stun}`);
+  selectAvatar(avatar); store.set('cyber_gf_avatar', avatar);
+  if (reconnect) { disconnect(); doConnect(); }
+};
+
+function toast(msg) { $('micInfo').textContent = msg; }
+
+setConn('idle', '尚未連線');
+$('btnCall').disabled = true;   // until the avatar list is in, so the first connect uses the chosen avatar
+loadAvatars().finally(() => $('btnCall').disabled = false);
+</script>
+</body>
+</html>

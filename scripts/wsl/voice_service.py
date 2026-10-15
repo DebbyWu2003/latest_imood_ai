@@ -10,7 +10,7 @@ Per question:
 
 The TTS producer never waits for playback; a separate sender thread drains the queue concurrently.
 
-HTTP API (CORS enabled so the demo page on :8010 can call it):
+HTTP API (CORS enabled so the imood page on :8010 can call it):
   POST /api/ask?sessionid=<optional>&mode=<sentence|full>   body = question WAV bytes  -> {"job": id}
   GET  /api/job/<id>                                                                    -> state/texts/metrics
   GET  /api/health

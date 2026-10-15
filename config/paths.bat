@@ -19,8 +19,8 @@ rem ComfyUI portable (external) - only needed to regenerate assets\avatar\idle.m
 set COMFY_DIR=E:\ComfyUI_windows_portable
 set COMFY_PORT=8188
 
-rem Demo page
-set DEMO_URL=http://localhost:8010/cyber_gf/web/cyber_gf_demo.html
+rem Frontend page
+set FRONTEND_URL=http://localhost:8010/imood/imood_ai.html
 
 rem machine-local overrides (gitignored)
 if exist "%~dp0paths.local.bat" call "%~dp0paths.local.bat"

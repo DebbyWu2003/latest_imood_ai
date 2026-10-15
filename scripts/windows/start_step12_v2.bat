@@ -1,5 +1,5 @@
 @echo off
-rem Step 12 v2: llama-server (Windows) + LiveTalking/adapter + voice service (WSL %WSL_DISTRO%), then open the demo page.
+rem Step 12 v2: llama-server (Windows) + LiveTalking/adapter + voice service (WSL %WSL_DISTRO%), then open the imood page.
 call "%~dp0..\..\config\paths.bat"
 if not defined PROJECT_WSL (echo ERROR: could not reach WSL distro %WSL_DISTRO% & exit /b 1)
 curl -s --max-time 3 http://localhost:%LLAMA_PORT%/health | find "ok" >nul && goto llama_ready
@@ -13,4 +13,4 @@ echo WARNING: llama-server not ready after ~2 min - check the llama-server windo
 :llama_ready
 echo llama-server: OK
 wsl -d %WSL_DISTRO% -- bash "%PROJECT_WSL%/scripts/wsl/start_step12_v2.sh"
-start "" %DEMO_URL%
+start "" %FRONTEND_URL%
