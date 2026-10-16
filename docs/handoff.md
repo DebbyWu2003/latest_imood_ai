@@ -36,6 +36,18 @@
 - `config/paths.local.env` 加 `export LEGACY_VOICE=1`
 - `config/paths.local.bat`（從 `paths.local.example.bat` 複製）加 `set LEGACY_VOICE=1`
 
+兩種設定的差別：
+
+| | `LEGACY_VOICE=0`（預設） | `LEGACY_VOICE=1` |
+|---|---|---|
+| 啟動的服務 | 只有 LiveTalking（:8010） | LiveTalking（:8010）＋ llama-server（:8090）＋ 語音服務（:8020） |
+| 廠商語音（`/cyber_gf/voice`） | 可用 | 可用 |
+| 網頁麥克風、上傳 WAV | 不能用（沒有語音服務，會顯示「語音服務無法使用」） | 可用（辨識 → AI 回答 → 語音合成 → 數字人） |
+| 顯示卡記憶體 | 較少 | 約 23.3 / 24 GB，很吃緊 |
+| 兩邊同時說話 | 不適用 | 聲音排同一個佇列，**沒有測過**（見第六點） |
+
+只想測廠商內容就用 `0`；要用網頁麥克風或測舊流程才用 `1`。
+
 ### 啟動
 
 執行 `scripts\windows\start_step12_v2.bat`。預設只開數字人，並打開 http://localhost:8010/imood/imood_ai.html。
