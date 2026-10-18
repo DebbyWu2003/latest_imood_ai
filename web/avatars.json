@@ -1,6 +1,7 @@
 {
   "_comment": "Characters offered by imood_ai.html. id = LiveTalking avatar folder (data/avatars/<id>), built with scripts/wsl/lt_build_avatar.sh. The first entry is preselected.",
   "avatars": [
+    { "id": "wav2lip256_emo_calm", "label": "情緒角色（平靜／開心／難過 可切換）" },
     { "id": "wav2lip256_avatar3_WA3", "label": "白上衣 WA3（一次快眨）" },
     { "id": "wav2lip256_avatar3_BA3", "label": "黑上衣 BA3（兩次快眨）" },
     { "id": "wav2lip256_avatar3_WA2", "label": "白上衣 WA2" },

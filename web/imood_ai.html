@@ -71,6 +71,9 @@
     backdrop-filter:blur(6px); font-size:14px; }
   .chip-btn[aria-pressed=true] { background:var(--ink); color:#fff; border-color:var(--ink); }
 
+  .emo-bar { position:absolute; left:50%; bottom:88px; transform:translateX(-50%); display:none; gap:8px; z-index:2; }
+  .screen[data-live="1"] .emo-bar { display:flex; }
+  .emo-bar .chip-btn { padding:7px 16px; font-size:14px; backdrop-filter:blur(6px); }
   .tags { position:absolute; top:16px; left:16px; display:flex; gap:8px; }
   .tag { padding:4px 10px; border-radius:999px; font-size:12px; background:rgba(20,12,30,.55); color:#fff; backdrop-filter:blur(6px); }
   .tag.live { background:var(--err); font-weight:700; letter-spacing:.5px; }
@@ -174,6 +177,11 @@
       <div class="chips" id="avatarChips"></div>
     </div>
     <div class="tags"><span class="tag live" id="tagLive" hidden>LIVE</span><span class="tag rec" id="tagRec" hidden>● REC</span></div>
+    <div class="emo-bar" id="emoBar" role="group" aria-label="情緒（測試／示範用）">
+      <button class="chip-btn" data-emo="neutral" aria-pressed="true">😐 平靜</button>
+      <button class="chip-btn" data-emo="happy" aria-pressed="false">😊 開心</button>
+      <button class="chip-btn" data-emo="sad" aria-pressed="false">😢 難過</button>
+    </div>
     <div class="dock">
       <button class="call" id="btnCall">
         <svg viewBox="0 0 24 24"><path d="M15 10l5-3v10l-5-3z"/><rect x="3" y="6" width="12" height="12" rx="2"/></svg>
@@ -307,7 +315,8 @@ async function connect() {
   log(`connected, session ${sessionid} (${avatar || 'server default avatar'})`);
   statTimer = setInterval(rtcStats, 1000);
   es = new EventSource(`${base(cfg.control)}/sse?sessionid=${sessionid}`);   // LiveTalking playback events (log only)
-  es.onmessage = e => { try { const m = JSON.parse(e.data); if (m.cyber_gf_utt) log(`LiveTalking playback ${m.status}`); } catch {} };
+  es.onmessage = e => { try { const m = JSON.parse(e.data); if (m.cyber_gf_utt) { log(`LiveTalking playback ${m.status}`); if (m.status === 'end') emoFromVendor = false; }
+    else if (m.type === 'emotion') { log(`emotion ${m.emotion} (utt ${String(m.utterance_id).slice(0, 8)})`); showEmotion(m.emotion); emoFromVendor = true; } } catch {} };
   es.onerror = () => { es?.close(); es = null; };
 }
 function disconnect(state = 'idle', text = '尚未連線') {
@@ -448,7 +457,7 @@ async function ask(audio, label) {
   try {
     r = await (await fetch(`${base(cfg.voice)}/api/ask?sessionid=${sessionid}&mode=${mode}`, { method: 'POST', body: audio })).json();
     if (!r.job) throw new Error(r.error || 'no job id');
-  } catch (e) { setState('error'); her.bubble.textContent = `語音服務無法使用（${base(cfg.voice)}）`; log(`voice service error: ${e}`); return finish(); }
+  } catch (e) { setState('error'); her.bubble.textContent = `語音服務無法使用（${base(cfg.voice)}）。舊的錄音流程預設關閉（LEGACY_VOICE=0）；廠商語音請用發送端送到 /cyber_gf/voice`; log(`voice service error: ${e}`); return finish(); }
   log(`job ${r.job}`);
   // sequential polling (one request in flight at a time, every 200 ms)
   for (let fails = 0; ; await new Promise(res => setTimeout(res, 200))) {
@@ -476,6 +485,19 @@ async function ask(audio, label) {
     }
   }
 }
+
+// ---- emotion chips on the stage: ask the server to swap the session's face (the same switch the vendor voice path triggers)
+let emoFromVendor = false;
+const showEmotion = emo => $('emoBar').querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', b.dataset.emo === emo));
+$('emoBar').addEventListener('click', async e => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (!sessionid) { log('emotion: not connected'); return; }
+  try {
+    const r = await (await fetch(`${base(cfg.control)}/cyber_gf/emotion?sessionid=${sessionid}&emotion=${b.dataset.emo}`, { method: 'POST' })).json();
+    if (r.code === 0) { emoFromVendor = false; showEmotion(b.dataset.emo); log(`emotion -> ${b.dataset.emo} (${r.data.avatar_id})`); }
+    else log(`emotion failed: ${r.msg}`);
+  } catch (err) { log(`emotion failed: ${err}`); }
+});
 
 // ---- avatars (web/avatars.json): chips on the stage + select in settings; switching while connected reconnects
 async function loadAvatars() {

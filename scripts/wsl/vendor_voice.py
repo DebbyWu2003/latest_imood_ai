@@ -36,7 +36,8 @@ class _Utt:
 
 
 class VendorReceiver:
-    def __init__(self, get_session, make_item, token=None, origins=None):
+    def __init__(self, get_session, make_item, token=None, origins=None, on_emotion=None):
+        self.on_emotion = on_emotion            # (sess, emotion, speaking) -> None; switches the avatar's face, see livetalking_cyber_gf.set_emotion
         self.get_session = get_session          # () -> avatar session or None
         self.make_item = make_item              # (float32 ndarray, userdata dict) -> item for sess.asr.queue
         self.token = token if token is not None else os.environ.get("VENDOR_VOICE_TOKEN", "")
@@ -181,6 +182,8 @@ class VendorReceiver:
                             q = queue.Queue(); sess.add_msgqueue(q); listener = (sess, q)
                             pump = asyncio.ensure_future(self._pump(ws, sess, q))
                         utt = _Utt(uid, emotion, sess)
+                        if not getattr(sess, "speaking", False):     # idle: change the face now so it is ready (and faded) when the voice starts
+                            self._emotion(sess, emotion, speaking=True)
                         ignored = False
                     elif kind == "utterance.end":
                         if utt is None or data.get("utterance_id") != utt.id:
@@ -202,9 +205,17 @@ class VendorReceiver:
             log.info("sender disconnected exc=%r code=%s", ws.exception(), ws.close_code)
         return ws
 
+    def _emotion(self, sess, emotion, speaking=False):
+        if self.on_emotion:
+            try:
+                self.on_emotion(sess, emotion, speaking)
+            except Exception:
+                log.exception("on_emotion(%r) failed", emotion)
+
     async def _pump(self, ws, sess, q):
         """LiveTalking announces start/end when it ACTUALLY plays our frames -> playback.* to the sender,
         and the emotion to /sse listeners at the same moment."""
+        last_emo = {}
         try:
             while not ws.closed:
                 try:
@@ -218,9 +229,13 @@ class VendorReceiver:
                 if not uid:
                     continue
                 if m.get("status") == "start":
+                    last_emo[uid] = m.get("emotion", "neutral")
+                    self._emotion(sess, last_emo[uid], speaking=True)
                     sess.send_msg(json.dumps({"type": "emotion", "utterance_id": uid, "emotion": m.get("emotion", "neutral")}))
                     await self._send(ws, {"type": "playback.started", "utterance_id": uid})
                 elif m.get("status") == "end":
+                    # hold the utterance's emotion on its idle face after speech (user decision; docs/emotion_interface.md suggested calm)
+                    self._emotion(sess, last_emo.pop(uid, "neutral"))
                     await self._send(ws, {"type": "playback.ended", "utterance_id": uid})
         except asyncio.CancelledError:
             pass
