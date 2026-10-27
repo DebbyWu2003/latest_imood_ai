@@ -55,7 +55,10 @@ def run_job(job):
 
     # ---- ASR
     job.state = "asr"
-    job.transcript, duration = transcriber.transcribe(M["asr"], job.wav, a)
+    if job.transcript:                                  # microphone path: already recognised (and merged) upstream
+        duration = 0.0
+    else:
+        job.transcript, duration = transcriber.transcribe(M["asr"], job.wav, a)
     job.mark("asr_done"); job.metrics["input_audio_s"] = round(duration, 2)
 
     # ---- producer (TTS) / consumer (sender) plumbing
