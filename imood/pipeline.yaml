@@ -1,0 +1,19 @@
+# Single configuration entry point. Defaults deliver the accepted vendor setup.
+mode: vendor                  # vendor | full
+
+vendor:
+  ws_path: /cyber_gf/voice    # public path, must not change (vendor sender depends on it)
+
+emotion:
+  enabled: true               # used in full mode only
+  default: neutral            # used on timeout / failure / too-short text
+  udp_host: 127.0.0.1
+  udp_port: 8102              # TBD (to be confirmed)
+  timeout_ms: 300             # TBD (to be confirmed)
+
+downstream:
+  host: 127.0.0.1
+  port: 8100                  # TBD (to be confirmed)
+
+livetalking:
+  url: http://127.0.0.1:8010
