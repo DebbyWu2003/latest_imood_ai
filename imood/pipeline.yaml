@@ -14,6 +14,8 @@ emotion:
 downstream:
   host: 127.0.0.1
   port: 8100                  # TBD (to be confirmed)
+  transport: framed           # framed (TCP BEGIN/AUDIO/END) | http (legacy chunked POST)
+  enabled: true
 
 livetalking:
   url: http://127.0.0.1:8010

@@ -37,6 +37,8 @@ from server.session_manager import session_manager
 from avatars.base_avatar import AudioFrameData
 from utils.logger import logger
 from imood.intake.vendor_ws import VendorReceiver
+from imood.downstream import framed_receiver
+from imood.common import config as imood_cfg
 from imood.downstream.face_switcher import EMOTION_PREFIX, EMOTION_AVATARS, EMOTION_SPEAK, EMOTION_FADE, set_emotion, _install_fade, _emo_avatar
 
 FRAME = 320                       # 20 ms @ 16 kHz, as BaseASR.chunk
@@ -253,6 +255,25 @@ async def emotion_route(request):
 
 vendor = VendorReceiver(_latest_session, lambda data, ud: AudioFrameData(data=data, type=0, userdata=ud), on_emotion=set_emotion)
 
+def _find_session(sid):
+    """Framed link: the named session if it exists, else the most recently opened one."""
+    if sid and session_manager.get_session(sid) is not None:
+        return sid, session_manager.get_session(sid)
+    live = [(k, v) for k, v in session_manager.sessions.items() if v is not None]
+    return live[-1] if live else (None, None)
+
+
+async def _start_framed(app):
+    """TCP framed receiver (BEGIN/AUDIO/END, STATUS back) in this process; disabled with downstream.enabled: false."""
+    c = imood_cfg.load().get("downstream", {})
+    if not c.get("enabled", True):
+        return
+    handler = framed_receiver.make_handler(audio_stream, _find_session, set_emotion,
+                                           lambda u: _public(UTTS[u]) if u in UTTS else None)
+    app["imood_framed"] = await asyncio.start_server(handler, c.get("bind", "127.0.0.1"), int(c.get("port", 8100)))
+    logger.info("[cyber_gf] framed downstream receiver on %s:%s", c.get("bind", "127.0.0.1"), c.get("port", 8100))
+
+
 _orig_setup_routes = lt_routes.setup_routes
 
 
@@ -265,6 +286,7 @@ def setup_routes_with_cyber_gf(app):
     app.router.add_get("/cyber_gf/emotion", emotion_route)
     app.router.add_get("/cyber_gf/voice", vendor.handle)     # vendor real-time voice WebSocket (docs/vendor_voice_receiver.md)
     app.router.add_static("/imood/", path=str(PROJECT / "web"), show_index=False)
+    app.on_startup.append(_start_framed)
     logger.info("[cyber_gf] adapter routes registered: /cyber_gf/audio_stream, /cyber_gf/utt/{utt}, /cyber_gf/stats, /imood/")
     _orig_setup_routes(app)
 

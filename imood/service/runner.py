@@ -10,6 +10,7 @@ from imood.common import config as cfgmod
 from imood.common.labels import code_to_vendor
 from imood.dialogue.llm_client import llm_deltas
 from imood.dialogue.segmenter import Segmenter
+from imood.downstream.framed_client import FramedClient
 from imood.emotion.udp_client import EmotionClientSync
 from imood.intake import transcriber
 from imood.service.state import CFG, LT, M, ROOT, V2
@@ -65,6 +66,8 @@ def run_job(job):
     stat = {"tts_chunks": 0, "audio_q_max": 0, "tts_segments": 0}
     tts_kw = dict(language=c["language"], ref_audio=str(ROOT / c["ref_audio"]), ref_text=CFG["ref_text"],
                   xvec_only=tf["xvec_only"], append_silence=tf["append_silence"], chunk_size=tf["chunk_size"])
+    dcfg = cfgmod.load().get("downstream", {})
+    framed = dcfg.get("transport", "framed") == "framed" and dcfg.get("enabled", True)
     emo = {"client": _emotion_client(), "decided": False, "started": False}
 
     def emit(b):
@@ -74,7 +77,8 @@ def run_job(job):
                 code, ready = emo["client"].result()
                 vendor = code_to_vendor(code)
                 job.metrics["emotion"] = {"code": code, "vendor": vendor, "bert_ready": ready}
-                threading.Thread(target=_switch_face, args=(base, job.sessionid, vendor), daemon=True).start()
+                if not framed:                                  # framed link carries the emotion in BEGIN
+                    threading.Thread(target=_switch_face, args=(base, job.sessionid, vendor), daemon=True).start()
         audio_q.put(b)
         stat["audio_q_max"] = max(stat["audio_q_max"], audio_q.qsize())
 
@@ -97,12 +101,37 @@ def run_job(job):
                     return
                 job.mark("first_audio_submitted")
                 yield b
-        try:
+
+        def send_http():
             conn = http.client.HTTPConnection(base.split("//")[1], timeout=300)
             conn.request("POST", f"/cyber_gf/audio_stream?sessionid={job.sessionid}&utt={utt}", body=body(),
                          headers={"Content-Type": "application/octet-stream"}, encode_chunked=True)
             sender_result.update(json.loads(conn.getresponse().read()))
             job.mark("audio_stream_closed")
+
+        def send_framed():
+            cl = FramedClient(dcfg.get("host", "127.0.0.1"), dcfg.get("port", 8100))
+            cl.open(on_status=lambda st: job.metrics.setdefault("downstream_status", []).append(st.get("state")))
+            first = True
+            try:
+                while True:
+                    b = audio_q.get()
+                    if b is None:
+                        break
+                    if first:                                   # emotion was decided before the first chunk was queued
+                        first = False
+                        job.mark("first_audio_submitted")
+                        cl.begin(job.sessionid, utt, (job.metrics.get("emotion") or {}).get("vendor", ""), text=job.reply)
+                    cl.audio_f32(b)
+                if not first:
+                    cl.end()
+                    cl.done.wait(180)
+                    job.mark("audio_stream_closed")
+            finally:
+                cl.close()
+
+        try:
+            (send_framed if framed else send_http)()
         except Exception as e:
             job.error = f"send: {e}"; job.log.append(traceback.format_exc())
 
