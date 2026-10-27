@@ -10,6 +10,7 @@ import json
 from imood.common.labels import DEFAULT_CODE
 
 _seq = itertools.count(1)
+MAX_REPLY = 4096
 
 
 class _Once(asyncio.DatagramProtocol):
@@ -58,3 +59,39 @@ class EmotionClient:
             except Exception:
                 pass
         return self.default
+
+
+class EmotionClientSync:
+    """Blocking-socket twin of EmotionClient for the thread-based voice service: start(text) runs one request in a
+    background thread; result() returns the finished code or the default - it never waits."""
+
+    def __init__(self, host="127.0.0.1", port=8102, timeout_ms=300, default=DEFAULT_CODE):
+        self.addr, self.timeout, self.default = (host, port), timeout_ms / 1000.0, default
+        self._code, self._conf, self._done = default, 0.0, False
+
+    def _run(self, text):
+        import socket
+        seq = next(_seq)
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+                s.settimeout(self.timeout)
+                s.sendto(json.dumps({"seq": seq, "text": text}).encode("utf-8"), self.addr)
+                while True:                                   # skip stale replies from earlier requests
+                    r = json.loads(s.recvfrom(MAX_REPLY)[0].decode("utf-8"))
+                    if int(r["seq"]) == seq:
+                        code = int(r["code"])
+                        if 0 <= code <= 4:
+                            self._code, self._conf = code, float(r.get("confidence", 0.0))
+                        break
+        except Exception as exc:
+            print(f"[emotion] classify failed, default {self.default}: {exc!r}", flush=True)
+        self._done = True
+
+    def start(self, text):
+        import threading
+        threading.Thread(target=self._run, args=(text,), daemon=True).start()
+        return self
+
+    def result(self):
+        """-> (code, ready). Not ready -> (default, False)."""
+        return (self._code, True) if self._done else (self.default, False)
