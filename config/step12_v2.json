@@ -1,5 +1,5 @@
 {
-  "_note": "Step 12 v2 streaming service. ASR/LLM/ref/persona from config/voice.json; TTS quality settings identical to the benchmark (docs/perf_tts_fast.md).",
+  "_note": "Step 12 v2 streaming service. ASR/LLM/ref/persona from config/voice.json;",
   "wsl_distro": "Ubuntu-24.04",
   "service": {
     "host": "0.0.0.0",

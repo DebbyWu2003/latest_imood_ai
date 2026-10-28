@@ -43,9 +43,6 @@ assets/avatar/*.png
 *.tar.gz
 *.rar
 
-# ---- third-party reference copies (see docs/reference/README.md for links) ----
-docs/reference/*
-!docs/reference/README.md
 
 # ---- OS / editor ----
 Thumbs.db
@@ -53,6 +50,3 @@ desktop.ini
 .DS_Store
 .vscode/
 .idea/
-
-# machine-specific notes about unrelated local services
-docs/stopped_services.md

@@ -110,8 +110,7 @@
     },
     "model_cache": "/root/.cache/huggingface/hub",
     "config": "config/voice.json",
-    "run": "scripts/wsl/run_voice_test.sh",
-    "results": "docs/step9_voice_test.md"
+    "run": "scripts/wsl/run_voice_test.sh"
   },
   "step12_v2": {
     "doc": "docs/step12_v2.md",

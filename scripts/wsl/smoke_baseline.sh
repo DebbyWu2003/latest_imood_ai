@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Baseline smoke check used between every refactor step (Ubuntu-24.04).
+# Smoke check (Ubuntu-24.04):
 #   1. vendor protocol test (no GPU)         2. LiveTalking public routes answer
 #   3. emotion switch over HTTP (calm/happy/sad) when LiveTalking is running with an emotion avatar
 # Usage: wsl -d Ubuntu-24.04 -- bash scripts/wsl/smoke_baseline.sh      (LiveTalking should be running on :8010)

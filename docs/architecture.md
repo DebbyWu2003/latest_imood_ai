@@ -42,5 +42,5 @@ reference voice: assets/ref.wav (6 s, 24 kHz mono) + config/ref_text.txt (its ex
 ```
 
 ## Fallbacks kept in the repo
-- **Step 12 MVP** (non-streaming): `scripts/windows/run_step12_mvp.bat` synthesizes the full `reply.wav` and POSTs it to upstream `/humanaudio`. See [step12_mvp.md](step12_mvp.md).
-- **Original Qwen3-TTS backend** (`qwen-tts` 0.1.1, `.venv-voice`, RTF ≈ 3.1): `scripts/wsl/run_voice_test.sh`. See [step9_voice_test.md](step9_voice_test.md).
+- **Step 12 MVP** (non-streaming): `scripts/windows/run_step12_mvp.bat` synthesizes the full `reply.wav` and POSTs it to upstream `/humanaudio`.
+- **Original Qwen3-TTS backend** (`qwen-tts` 0.1.1, `.venv-voice`, RTF ≈ 3.1): `scripts/wsl/run_voice_test.sh`.

@@ -4,7 +4,7 @@
 
 ## 1. 怎麼啟動
 
-| | `vendor`（預設，驗收版） | `full`（完整版） |
+| | `vendor`（預設） | `full`（完整版） |
 |---|---|---|
 | 啟動的服務 | LiveTalking（含轉接層） | LiveTalking ＋ BERT 情緒服務（UDP :8102）＋ 語音服務（:8020，麥克風 WS :8021）＋ llama-server（Windows :8090） |
 | 語音來源 | 廠商 `ws://localhost:8010/cyber_gf/voice` | 瀏覽器錄音（`POST :8020/api/ask`）或串流麥克風（`ws://127.0.0.1:8021/ws/audio`） |

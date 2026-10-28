@@ -1,4 +1,3 @@
-# 2026-09-09 更新：load() 新增 dtype 參數（fp16 直接載，不再載完再 .half()），待GINO複核
 """模型載入、標籤核對、單句推論與計時。"""
 import os
 import re

@@ -120,7 +120,7 @@ Tested on the reference machine only. Each step reuses a script from this repo.
 | `config/voice.json` | ASR model, device, compute type and language; LLM URL and sampling; TTS model, dtype, attention; reference voice files |
 | `config/step12_v2.json` | voice service port (8020), TTS `chunk_size` (8), `append_silence` (false), LLM→TTS mode (`full` or `sentence`), LiveTalking URL and avatar ID |
 | `config/step12.json` | Step 12 MVP (fallback) settings |
-| `config/persona.txt` | LLM system prompt (the tutorial's persona) |
+| `config/persona.txt` | LLM system prompt (persona) |
 | `assets/ref.wav`, `config/ref_text.txt` | voice-cloning reference and its exact transcript |
 | `config/components.json` | informational inventory of the reference machine's external components |
 
@@ -154,7 +154,7 @@ RTX 4090 24 GB, WSL2 Ubuntu-24.04, `assets/test.wav` (3.84 s), 5 consecutive run
 | LiveTalking | final 25.0 fps, inference 98–115 fps; 0 underruns / 0 overflows (5 of 5 runs, and 5 of 5 again after a cold start via the repo launchers: speaking start 2.87–3.70 s) |
 | VRAM (full stack) | about 23.3 GB of 24 GB (llama-server ~10.0 GB; voice service + LiveTalking ~9–11 GB; desktop ~1.5 GB) |
 
-Evidence and method: [docs/step12_v2.md](docs/step12_v2.md), [docs/perf_tts_fast.md](docs/perf_tts_fast.md), [docs/perf_tts_investigation.md](docs/perf_tts_investigation.md).
+Method and measurements: [docs/step12_v2.md](docs/step12_v2.md).
 
 ## Known issues
 - **Remote-desktop viewing can stutter** even though recordings are smooth and in sync and the server renders a steady 25 fps. The imood page shows live WebRTC receive stats (fps, dropped frames, freezes, jitter) under 診斷資訊 for diagnosis.
@@ -175,7 +175,7 @@ cyber_gf/
 │       └── perf/             benchmarks and the headless end-to-end test (outputs go to outputs/, gitignored)
 ├── web/                      imood_ai.html, avatars.json (served by the adapter at /imood/)
 ├── assets/                   ref.wav (voice reference), test.wav (sample question), avatar/ (image + idle.mp4), test_frames/ (evidence images)
-└── docs/                     architecture, Step 12 v2 / MVP / Step 9, TTS performance, components, deviations, progress log
+└── docs/                     architecture, modes, streaming service, interfaces, components
 ```
 `outputs/` and `logs/` are created at runtime and are gitignored.
 
@@ -184,13 +184,8 @@ cyber_gf/
 |---|---|
 | [docs/architecture.md](docs/architecture.md) | Current architecture, asset preparation, fallbacks |
 | [docs/step12_v2.md](docs/step12_v2.md) | Streaming design, LiveTalking source analysis, adapter, measurements, start/stop, fallback |
-| [docs/step12_mvp.md](docs/step12_mvp.md) | Non-streaming MVP (`/humanaudio`) |
-| [docs/step9_voice_test.md](docs/step9_voice_test.md) | First voice pipeline (original qwen-tts backend) |
-| [docs/perf_tts_investigation.md](docs/perf_tts_investigation.md) | Why official qwen-tts was slow (launch-bound, GPU 17% busy) |
-| [docs/perf_tts_fast.md](docs/perf_tts_fast.md) | faster-qwen3-tts evaluation, before/after, quality check |
 | [docs/components.md](docs/components.md) | External components, versions, sources |
-| [docs/deviations.md](docs/deviations.md) | Differences from the original tutorial |
-| [docs/status.md](docs/status.md) | Step-by-step progress log (Chinese) |
+| [docs/modes.md](docs/modes.md) | The two modes: start, structure, tests, settings |
 
 ## Further development (not part of the working core)
 - Microphone input and VAD (end-of-speech detection)

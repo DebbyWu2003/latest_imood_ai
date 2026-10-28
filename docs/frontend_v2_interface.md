@@ -11,7 +11,7 @@
    │                   └──────────────▲───────────────┘
    │ ① POST {media}/offer            │ （接收端自己決定怎麼從 LiveTalking 拿 RTP）
    │    ← WebRTC 影像＋聲音           │
-   ├──────────────► 新 RTP 接收端 :8030（組員負責）
+   ├──────────────► RTP 接收端 :8030
    │
    │ ② POST {voice}/api/ask?sessionid=…  ──►  voice service :8020（不變）
    │ ③ /sse、/record ──────────────────────►  LiveTalking :8010（不變）
