@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Step 9 (rebuilt): Python 3.12 env with faster-whisper large-v3 + Qwen3-TTS 1.7B Base.
+# Voice environment: Python 3.12 env with faster-whisper large-v3 + Qwen3-TTS 1.7B Base.
 # Installs into WSL (not /mnt/c). Does not touch llama.cpp / ComfyUI / LiveTalking.
 set -ex
 source "$(dirname "$0")/../../config/paths.env"

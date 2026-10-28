@@ -1,5 +1,5 @@
 {
-  "_note": "Step 12 v2 streaming service. ASR/LLM/ref/persona from config/voice.json;",
+  "_note": "Streaming service. ASR/LLM/ref/persona from config/voice.json;",
   "wsl_distro": "Ubuntu-24.04",
   "service": {
     "host": "0.0.0.0",
@@ -17,7 +17,7 @@
     "library": "soxr ResampleStream (stateful, one resampler per utterance)"
   },
   "llm_to_tts": {
-    "_note": "mode 'full' (default): TTS starts when the LLM reply is complete - measured faster on this machine (avatar speaking start mean 3.07 s vs 3.29 s for 'sentence', because TTS and llama.cpp share the GPU while the LLM is still generating) and keeps whole-utterance prosody. 'sentence' remains selectable per request (?mode=sentence).",
+    "_note": "mode 'full' (default): TTS starts when the LLM reply is complete and keeps whole-utterance prosody. 'sentence' starts TTS per sentence and can be selected per request (?mode=sentence).",
     "mode": "full",
     "sentence_end_chars": "。！？!?；;…\n",
     "min_segment_chars": 8,

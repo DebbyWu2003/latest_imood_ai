@@ -1,6 +1,6 @@
 # Stage 1-2 VRAM measurement (Windows side) + launches the WSL TTS perf run.
 # Stage 1: no cyber_gf model loaded (llama-server stopped). Stage 2: llama-server loaded.
-# Benchmark tool (not needed to run the demo). Defaults = reference machine; override with parameters.
+# Benchmark tool (not needed to run the demo). Defaults are the standard locations; override with parameters.
 param([int]$Runs = 3,
       [string]$LlamaDir = "E:\llama.cpp",
       [string]$LlamaModel = "E:\llama.cpp\models\Qwen3-14B-Q4_K_M.gguf",

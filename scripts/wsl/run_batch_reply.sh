@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Step 12 MVP: test.wav -> ASR -> llama.cpp -> fast Qwen3-TTS -> reply.wav -> LiveTalking /humanaudio
+# Batch reply: test.wav -> ASR -> llama.cpp -> fast Qwen3-TTS -> reply.wav -> LiveTalking /humanaudio
 # Prereqs: llama-server on :8090 (Windows), LiveTalking on :8010 with wav2lip256_myavatar,
 #          browser page http://localhost:8010/index.html connected (avatar video playing).
 # Usage (inside Ubuntu-24.04):  bash run_batch_reply.sh [--in file.wav] [--session <id>]

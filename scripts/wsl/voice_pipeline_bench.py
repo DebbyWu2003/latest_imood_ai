@@ -1,4 +1,4 @@
-"""Step 9 voice pipeline test (no mic / WebRTC / LiveTalking):
+"""Voice pipeline benchmark (no mic / WebRTC / LiveTalking):
 
     input.wav -> Faster-Whisper large-v3 -> llama.cpp Qwen3-14B (:8090) -> Qwen3-TTS 1.7B Base clone -> reply.wav
 

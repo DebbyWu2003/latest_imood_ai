@@ -11,7 +11,7 @@ few project routes are registered in the same aiohttp app (before upstream's cat
   WS   /cyber_gf/voice?token=..   vendor real-time voice receiver (vendor_voice.py; needs env VENDOR_VOICE_TOKEN)
   GET  /cyber_gf/utt/{utt}     per-utterance stats: frames, queue depth, underruns, playback start/end
   GET  /cyber_gf/stats         sessions + queue depth + last LiveTalking infer/final fps
-  GET  /imood/...              project frontend (C:/.../cyber_gf/web), page /imood/imood_ai.html
+  GET  /imood/...              project frontend (<repo>/web), page /imood/imood_ai.html
 
 Runtime-only instrumentation (no file edits): an instance-level wrapper on avatar_session.asr.get_audio_frame
 counts silence frames (type=1 => mouth closes) that occur *inside* an utterance (= underruns), and a
@@ -101,7 +101,7 @@ def _install_underrun_counter(session_id, session):
 
 
 def _listen_for_playback(session_id, session):
-    """Record when LiveTalking actually plays our start/end frames (BaseAvatar.notify -> msgqueues)."""
+    """Record when LiveTalking actually plays the project's start/end frames (BaseAvatar.notify -> msgqueues)."""
     if session_id in PLAYBACK_LISTENERS:
         return
     message_queue = queue.Queue()
@@ -149,7 +149,7 @@ async def audio_stream(request):
         Same item BaseASR.put_audio_frame() creates (AudioFrameData(type=0, userdata=eventpoint)), but all frames
         of the block become visible to the ASR thread at once. MelASR.run_step pulls 32 frames in a tight loop
         with a 10 ms get() timeout; with per-frame put() calls the ASR thread could take the 'start' frame and then
-        time out (GIL contention) before the next put(), inserting silence (measured: 2 frames at +0.01 s)."""
+        time out (GIL contention) before the next put(), inserting silence."""
         items = []
         for frame in frames:
             event = {}
@@ -172,7 +172,7 @@ async def audio_stream(request):
 
     # Pre-roll: the first TTS chunk (~0.62 s after resampling) reaches us as several TCP reads a few ms apart.
     # Releasing the first batch only once PREROLL_FRAMES are buffered keeps MelASR (10 ms get() timeout) from
-    # starving between those reads (measured: 1 silence frame at +0.01 s without it). Costs ~0 latency.
+    # starving between those reads. Costs ~0 latency.
     preroll_frames = int(request.query.get("preroll_frames", PREROLL_FRAMES))
     pending_bytes = b""
     async for chunk in request.content.iter_any():

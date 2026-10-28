@@ -22,7 +22,7 @@ BYTES_PER_MS = SAMPLE_RATE * SAMPLE_WIDTH // 1000  # 32
 class EndpointConfig:
     frame_ms: int = 20                 # webrtcvad 子 frame（10/20/30 擇一）
     vad_aggressiveness: int = 2        # 0–3，室內安靜環境的平衡點
-    end_silence_ms: int = 900          # 連續靜音多久算「講完一句」（700 對朗讀長句偏短，見 asr-42-vad-plan 第 7 節）
+    end_silence_ms: int = 900          # 連續靜音多久算「講完一句」
     min_utterance_ms: int = 400        # 有聲音訊不足這麼長就丟棄（濾咳嗽/誤觸）
     max_utterance_ms: int = 15000      # 硬上限，避免 VAD 卡噪音時 buffer 無限長
     pre_pad_ms: int = 300              # 保留語音起點前這麼多音訊，不切掉字頭

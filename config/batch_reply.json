@@ -1,8 +1,8 @@
 {
-  "_note": "Step 12 MVP: test.wav -> ASR -> llama.cpp -> fast Qwen3-TTS -> complete reply.wav -> LiveTalking /humanaudio. ASR/LLM/ref settings come from config/voice.json.",
+  "_note": "Batch reply: test.wav -> ASR -> llama.cpp -> fast Qwen3-TTS -> complete reply.wav -> LiveTalking /humanaudio. ASR/LLM/ref settings come from config/voice.json.",
   "wsl_distro": "Ubuntu-24.04",
   "tts_fast": {
-    "_note": "Same TTS settings as the streaming service. Non-streaming for the MVP.",
+    "_note": "Same TTS settings as the streaming service. Non-streaming.",
     "backend": "faster-qwen3-tts",
     "max_seq_len": 2048,
     "xvec_only": false,

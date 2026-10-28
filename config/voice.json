@@ -1,5 +1,5 @@
 {
-  "_note": "Step 9 voice pipeline (test.wav -> Faster-Whisper -> llama.cpp :8090 -> Qwen3-TTS clone -> reply.wav). Paths relative to the project root.",
+  "_note": "Voice pipeline settings (test.wav -> Faster-Whisper -> llama.cpp :8090 -> Qwen3-TTS clone -> reply.wav). Paths relative to the project root.",
   "asr": {
     "model": "Systran/faster-whisper-large-v3",
     "device": "cuda",

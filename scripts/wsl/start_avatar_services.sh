@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Start Step 12 v2 services in WSL (distro from config/paths.env, default Ubuntu-24.04):
+# Start the avatar services in WSL (distro from config/paths.env, default Ubuntu-24.04):
 #   1. LiveTalking (unmodified app.py) via the project launcher/adapter  -> :8010
 #   2. voice service (Whisper + FasterQwen3TTS) -> :8020, ONLY if LEGACY_VOICE=1 (config/paths.env)
 # Vendor speech arrives at ws://localhost:8010/cyber_gf/voice (needs VENDOR_VOICE_TOKEN, see docs/vendor_voice_receiver.md).
@@ -10,13 +10,13 @@ if [ "$WSL_DISTRO_NAME" != "$WSL_DISTRO" ]; then echo "ERROR: run in WSL distro 
 LOG="$PROJECT_WSL/logs"; mkdir -p "$LOG" "$LT_LOG_DIR"
 [ "$LEGACY_VOICE" = 1 ] && { curl -s --max-time 3 http://localhost:8090/health | grep -q ok || echo "WARNING: llama-server not reachable on :8090 (start scripts\windows\start_llama.bat)"; }
 
-# stop anything already on these ports (MVP LiveTalking or a previous v2 run)
+# stop anything already on these ports (an earlier LiveTalking run)
 pkill -f "app.py --transport webrtc" 2>/dev/null || true
 pkill -f "livetalking_cyber_gf.py" 2>/dev/null || true
 pkill -f "scripts/wsl/voice_service.py" 2>/dev/null || true
 sleep 2
 
-# 1. LiveTalking + adapter (same args as the verified MVP/lt_test_start.sh)
+# 1. LiveTalking + adapter (same args as lt_test_start.sh)
 ( cd "$LT_DIR" && source "$LT_VENV/bin/activate" && export LT_DIR && \
   exec setsid nohup python "$PROJECT_WSL/scripts/wsl/livetalking_cyber_gf.py" --transport webrtc --model wav2lip \
     --avatar_id "$LT_AVATAR_ID" --stun "$LT_STUN" ) > "$LT_LOG_DIR/lt_cyber_gf.log" 2>&1 < /dev/null &

@@ -5,7 +5,7 @@ Usage: python wan_idle.py [--image NAME_IN_ComfyUI/input] [--prefix video/idle] 
 import argparse, json, sys, time, urllib.request, random
 
 HOST = "http://127.0.0.1:8188"
-# Article step 4 prompt (actions only, no appearance description)
+# Prompt: actions only, no appearance description
 PROMPT = "她保持静止，轻微呼吸起伏；中途缓慢眨一次眼； 结尾头部回到最初位置。嘴唇始终闭合。固定机位。"
 # Template default negative prompt
 NEGATIVE_PROMPT = ("色调艳丽，过曝，静态，细节模糊不清，字幕，风格，作品，画作，画面，静止，整体发灰，最差质量，低质量，JPEG压缩残留，"

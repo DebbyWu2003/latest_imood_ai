@@ -213,7 +213,7 @@ class VendorReceiver:
                 log.exception("on_emotion(%r) failed", emotion)
 
     async def _pump(self, ws, session, message_queue):
-        """LiveTalking announces start/end when it ACTUALLY plays our frames -> playback.* to the sender,
+        """LiveTalking announces start/end when it ACTUALLY plays the project's frames -> playback.* to the sender,
         and the emotion to /sse listeners at the same moment."""
         last_emotion = {}
         try:
@@ -234,7 +234,7 @@ class VendorReceiver:
                     session.send_msg(json.dumps({"type": "emotion", "utterance_id": utterance_id, "emotion": event.get("emotion", "neutral")}))
                     await self._send(ws, {"type": "playback.started", "utterance_id": utterance_id})
                 elif event.get("status") == "end":
-                    # hold the utterance's emotion on its idle face after speech (user decision; docs/emotion_interface.md suggested calm)
+                    # keep the utterance's emotion on its idle face after speech
                     self._emotion(session, last_emotion.pop(utterance_id, "neutral"))
                     await self._send(ws, {"type": "playback.ended", "utterance_id": utterance_id})
         except asyncio.CancelledError:

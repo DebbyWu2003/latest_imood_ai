@@ -1,4 +1,4 @@
-"""Headless end-to-end check for Step 12 v2 (stand-in for the browser frontend).
+"""Headless end-to-end check of the streaming service (stand-in for the browser frontend).
 
 Connects to LiveTalking over WebRTC exactly like web/imood_ai.html (POST /offer), starts LiveTalking's
 recorder, submits a question WAV to the voice service (same call the page makes), and records what a

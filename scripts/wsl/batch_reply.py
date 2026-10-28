@@ -1,9 +1,9 @@
-"""Step 12 MVP (no streaming):
+"""Batch reply (no streaming):
 
     test.wav -> Faster-Whisper -> llama.cpp Qwen3 (:8090) -> faster-qwen3-tts voice clone -> complete reply.wav
              -> POST /humanaudio to the active LiveTalking WebRTC session -> wav2lip256_myavatar speaks
 
-ASR settings, LLM call (llm_stream) and persona/ref loading are reused from the Step 9 script.
+ASR settings, LLM call (llm_stream) and persona/ref loading are reused from voice_pipeline_bench.py.
 Run via scripts/wsl/run_batch_reply.sh (Ubuntu-24.04, .venv-tts-fast).
 """
 import argparse, datetime, json, os, sys, time, urllib.request, uuid

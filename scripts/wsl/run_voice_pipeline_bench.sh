@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run the Step 9 voice pipeline test. Requires llama-server on :8090 (scripts\windows\start_llama.bat).
+# Run the voice pipeline benchmark. Requires llama-server on :8090 (scripts\windows\start_llama.bat).
 # Usage: run_voice_pipeline_bench.sh [--in path.wav] [--runs N] [--out path.wav]
 source "$(dirname "$0")/../../config/paths.env"
 source "$VOICE_VENV/bin/activate"

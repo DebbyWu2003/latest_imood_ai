@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # LiveTalking install, wrapped in retries for flaky networks.
-# Already executed successfully on 2026-09-25 — do NOT re-run unless reinstalling.
+# One-time installation; running it again reinstalls LiveTalking.
 set -ex
 export PATH="$HOME/.local/bin:$PATH" UV_HTTP_TIMEOUT=300 UV_HTTP_RETRIES=10
 retry(){ for i in $(seq 1 15); do "$@" && return 0; echo "retry $i: $*"; sleep 5; done; return 1; }
