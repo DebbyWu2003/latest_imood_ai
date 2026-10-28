@@ -6,7 +6,7 @@
     { "id": "wav2lip256_avatar3_BA3", "label": "黑上衣 BA3（兩次快眨）" },
     { "id": "wav2lip256_avatar3_WA2", "label": "白上衣 WA2" },
     { "id": "wav2lip256_avatar3_BA2", "label": "黑上衣 BA2" },
-    { "id": "wav2lip256_avatar2_mA1", "label": "舊 mA1（歪頭微笑，嘴型較差）" },
-    { "id": "wav2lip256_avatar2_mB2", "label": "舊 mB2（歪頭微笑，嘴型較差）" }
+    { "id": "wav2lip256_avatar2_mA1", "label": "mA1（歪頭微笑）" },
+    { "id": "wav2lip256_avatar2_mB2", "label": "mB2（歪頭微笑）" }
   ]
 }
