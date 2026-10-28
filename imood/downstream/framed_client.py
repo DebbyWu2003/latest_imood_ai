@@ -10,14 +10,14 @@ import numpy as np
 from imood.common import framing
 
 
-def _read_exact(sock, n):
-    buf = b""
-    while len(buf) < n:
-        part = sock.recv(n - len(buf))
+def _read_exact(sock, length):
+    received = b""
+    while len(received) < length:
+        part = sock.recv(length - len(received))
         if not part:
             raise ConnectionError("downstream closed")
-        buf += part
-    return buf
+        received += part
+    return received
 
 
 class FramedClient:
@@ -39,14 +39,14 @@ class FramedClient:
     def _read_loop(self):
         try:
             while True:
-                ftype, n = framing.unpack_header(_read_exact(self.sock, framing.HEADER.size))
-                payload = _read_exact(self.sock, n) if n else b""
-                if ftype == framing.STATUS:
-                    st = json.loads(payload.decode("utf-8"))
-                    self.last_status = st
+                frame_type, payload_length = framing.unpack_header(_read_exact(self.sock, framing.HEADER.size))
+                payload = _read_exact(self.sock, payload_length) if payload_length else b""
+                if frame_type == framing.STATUS:
+                    status = json.loads(payload.decode("utf-8"))
+                    self.last_status = status
                     if self._on_status:
-                        self._on_status(st)
-                    if st.get("state") in ("playback_ended", "error"):
+                        self._on_status(status)
+                    if status.get("state") in ("playback_ended", "error"):
                         break
         except Exception:
             pass
@@ -58,11 +58,11 @@ class FramedClient:
                 "emotion": emotion, "text": text}
         self.sock.sendall(framing.pack(framing.BEGIN, json.dumps(meta, ensure_ascii=False).encode("utf-8")))
 
-    def audio_f32(self, b):
-        """b = float32-LE bytes (what the TTS stage produces); sent as PCM16."""
-        x = np.frombuffer(b, dtype="<f4")
-        pcm = (np.clip(x, -1.0, 1.0) * 32767.0).astype("<i2").tobytes()
-        self.sock.sendall(framing.pack(framing.AUDIO, pcm))
+    def audio_f32(self, float32_bytes):
+        """float32_bytes = float32-LE bytes (what the TTS stage produces); sent as PCM16."""
+        samples = np.frombuffer(float32_bytes, dtype="<f4")
+        pcm_bytes = (np.clip(samples, -1.0, 1.0) * 32767.0).astype("<i2").tobytes()
+        self.sock.sendall(framing.pack(framing.AUDIO, pcm_bytes))
 
     def end(self):
         self.sock.sendall(framing.pack(framing.END))

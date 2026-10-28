@@ -70,7 +70,7 @@ def with_session(sid, session):
 
 def drop_session(sid):
     plugin.session_manager.sessions.pop(sid, None)
-    plugin.ACTIVE.pop(sid, None)
+    plugin.ACTIVE_UTTERANCES.pop(sid, None)
 
 
 def test_audio_stream_unknown_session():
@@ -97,8 +97,8 @@ def test_audio_stream_short_answer_is_held_then_flushed_with_end_marker():
         assert np.array_equal(items[0].data, pcm[:FRAME]) and np.array_equal(items[2].data, pcm[2 * FRAME:3 * FRAME])
         last = np.zeros(FRAME, np.float32); last[:40] = pcm[960:]               # partial last frame is zero-padded
         assert np.array_equal(items[3].data, last)
-        assert plugin.UTTS["u-short"]["utt"] == "u-short" and plugin.ACTIVE[sid] is plugin.UTTS["u-short"]
-        assert getattr(sess.asr, "_cyber_gf_wrapped", False) is True and sid in plugin.LISTENERS
+        assert plugin.UTTERANCE_STATS["u-short"]["utt"] == "u-short" and plugin.ACTIVE_UTTERANCES[sid] is plugin.UTTERANCE_STATS["u-short"]
+        assert getattr(sess.asr, "_cyber_gf_wrapped", False) is True and sid in plugin.PLAYBACK_LISTENERS
     finally:
         drop_session(sid)
 
@@ -137,12 +137,12 @@ def test_utt_status_and_stats():
     with_session(sid, sess)
     try:
         call(plugin.audio_stream, FakeRequest({"sessionid": sid, "utt": "u-stats"}, [samples(640).tobytes()]))
-        plugin.FPS.clear(); plugin.FPS["final"] = 25.0
+        plugin.LIVETALKING_FPS.clear(); plugin.LIVETALKING_FPS["final"] = 25.0
         r = call(plugin.utt_status, SimpleNamespace(match_info={"utt": "u-stats"}))
         assert r["code"] == 0 and r["data"]["queue_frames_now"] == 3 and r["data"]["lt_fps"] == {"final": 25.0}
         assert r["data"]["utt"] == "u-stats" and "_in_underrun" not in r["data"]
         assert call(plugin.utt_status, SimpleNamespace(match_info={"utt": "zzz"})) == {"code": -1, "msg": "unknown utt"}
-        s = call(plugin.stats, SimpleNamespace())
+        s = call(plugin.stats_route, SimpleNamespace())
         assert s["code"] == 0 and s["data"]["lt_fps"] == {"final": 25.0}
         mine = [x for x in s["data"]["sessions"] if x["sessionid"] == sid]
         assert mine == [{"sessionid": sid, "avatar_id": "wav2lip256_avatar3_WA3", "queue_frames": 3, "speaking": False}]
@@ -150,7 +150,7 @@ def test_utt_status_and_stats():
         assert s["data"]["recent_utts"][-1]["utt"] == "u-stats"
     finally:
         drop_session(sid)
-        plugin.FPS.clear()
+        plugin.LIVETALKING_FPS.clear()
 
 
 def test_underrun_counter():
@@ -161,28 +161,28 @@ def test_underrun_counter():
     seq = [silence(), sound({"status": "start", "cyber_gf_utt": "u-un"}), silence(), silence(), sound(), silence(), end(), silence()]
     sess = FakeSession(frames=seq)
     st = {"utt": "u-un", "underrun_frames": 0, "underruns": 0, "underrun_at_s": [], "_in_underrun": False}
-    plugin.ACTIVE[sid] = st
+    plugin.ACTIVE_UTTERANCES[sid] = st
     try:
-        plugin._instrument(sid, sess)
+        plugin._install_underrun_counter(sid, sess)
         wrapped = sess.asr.get_audio_frame
-        plugin._instrument(sid, sess)
+        plugin._install_underrun_counter(sid, sess)
         assert sess.asr.get_audio_frame is wrapped                       # wrapped once only
         for _ in range(len(seq)):
             sess.asr.get_audio_frame()
         assert (st["underrun_frames"], st["underruns"], len(st["underrun_at_s"])) == (3, 2, 2)
         assert "consumed_start" in st and "consumed_end" in st and st["_in_underrun"] is False
     finally:
-        plugin.ACTIVE.pop(sid, None)
+        plugin.ACTIVE_UTTERANCES.pop(sid, None)
 
 
 def test_playback_listener_records_start_and_end():
     sid, sess = "t-listen", FakeSession()
     with_session(sid, sess)
     st = {"utt": "u-listen", "sessionid": sid}
-    plugin._remember(st)
+    plugin._record_utterance(st)
     try:
-        plugin._listen(sid, sess)
-        plugin._listen(sid, sess)                                          # second call is a no-op
+        plugin._listen_for_playback(sid, sess)
+        plugin._listen_for_playback(sid, sess)                                          # second call is a no-op
         assert len(sess.msgqueues) == 1
         sess.msgqueues[0].put(json.dumps({"status": "start", "cyber_gf_utt": "u-listen"}))
         sess.msgqueues[0].put(json.dumps({"status": "end", "cyber_gf_utt": "u-listen"}))
@@ -195,25 +195,25 @@ def test_playback_listener_records_start_and_end():
     finally:
         drop_session(sid)
         end = time.time() + 5
-        while time.time() < end and sid in plugin.LISTENERS:
+        while time.time() < end and sid in plugin.PLAYBACK_LISTENERS:
             time.sleep(0.05)
-        assert sid not in plugin.LISTENERS
+        assert sid not in plugin.PLAYBACK_LISTENERS
 
 
 def test_remember_keeps_last_100():
-    plugin.UTTS.clear()
+    plugin.UTTERANCE_STATS.clear()
     for i in range(105):
-        plugin._remember({"utt": f"r{i}"})
-    assert len(plugin.UTTS) == 100 and next(iter(plugin.UTTS)) == "r5"
-    plugin.UTTS.clear()
+        plugin._record_utterance({"utt": f"r{i}"})
+    assert len(plugin.UTTERANCE_STATS) == 100 and next(iter(plugin.UTTERANCE_STATS)) == "r5"
+    plugin.UTTERANCE_STATS.clear()
 
 
 def test_fps_capture():
-    plugin.FPS.clear()
+    plugin.LIVETALKING_FPS.clear()
     rec = logging.LogRecord("x", logging.INFO, "", 0, "actual avg infer fps:101.5 and actual avg final fps:25.0", None, None)
     plugin._FpsCapture().emit(rec)
-    assert plugin.FPS["infer"] == 101.5 and "infer_at" in plugin.FPS and "final" not in plugin.FPS
-    plugin.FPS.clear()
+    assert plugin.LIVETALKING_FPS["infer"] == 101.5 and "infer_at" in plugin.LIVETALKING_FPS and "final" not in plugin.LIVETALKING_FPS
+    plugin.LIVETALKING_FPS.clear()
 
 
 def test_session_lookup_and_emotion_route():

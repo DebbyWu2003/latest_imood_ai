@@ -29,7 +29,6 @@ os.chdir(LT_DIR)
 sys.path.insert(0, LT_DIR)
 sys.path.insert(0, str(PROJECT))      # repo root: imood package
 
-import cv2
 import numpy as np
 from aiohttp import web
 import server.routes as lt_routes
@@ -45,98 +44,102 @@ FRAME = 320                       # 20 ms @ 16 kHz, as BaseASR.chunk
 FRAME_BYTES = FRAME * 4           # float32
 OVERFLOW_FRAMES = 50 * 60         # >60 s queued = overflow warning
 PREROLL_FRAMES = 24               # 480 ms, all from the first TTS chunk (~0.62 s) -> no added wait
-UTTS = collections.OrderedDict()  # utt -> stats (last 100)
-ACTIVE = {}                       # sessionid -> stats of the utterance currently being consumed
-LISTENERS = {}                    # sessionid -> msgqueue thread
-FPS = {}
+UTTERANCE_STATS = collections.OrderedDict()  # utt -> stats (last 100)
+ACTIVE_UTTERANCES = {}                       # sessionid -> stats of the utterance currently being consumed
+PLAYBACK_LISTENERS = {}                      # sessionid -> msgqueue thread
+LIVETALKING_FPS = {}
 
 
 class _FpsCapture(logging.Handler):
     rx = re.compile(r"actual avg (infer|final) fps:([\d.]+)")
 
     def emit(self, record):
-        m = self.rx.search(record.getMessage())
-        if m:
-            FPS[m.group(1)] = float(m.group(2)); FPS[m.group(1) + "_at"] = time.time()
+        match = self.rx.search(record.getMessage())
+        if match:
+            LIVETALKING_FPS[match.group(1)] = float(match.group(2)); LIVETALKING_FPS[match.group(1) + "_at"] = time.time()
 
 
 logger.addHandler(_FpsCapture())
 
 
-def _remember(st):
-    UTTS[st["utt"]] = st
-    while len(UTTS) > 100:
-        UTTS.popitem(last=False)
+def _record_utterance(utterance_stats):
+    UTTERANCE_STATS[utterance_stats["utt"]] = utterance_stats
+    while len(UTTERANCE_STATS) > 100:
+        UTTERANCE_STATS.popitem(last=False)
 
 
-def _instrument(sid, sess):
+def _install_underrun_counter(session_id, session):
     """Wrap this session's ASR.get_audio_frame (instance attribute only) to count in-utterance silence frames."""
-    asr = sess.asr
-    if getattr(asr, "_cyber_gf_wrapped", False):
+    session_asr = session.asr
+    if getattr(session_asr, "_cyber_gf_wrapped", False):
         return
-    orig = asr.get_audio_frame
+    original_get_audio_frame = session_asr.get_audio_frame
 
-    def wrapped():
-        f = orig()
-        st = ACTIVE.get(sid)
-        if st is not None:
-            ud = f.userdata or {}
-            mine = ud.get("cyber_gf_utt") == st["utt"]
-            if mine and ud.get("status") == "start":
-                st["consumed_start"] = time.time()
-            elif st.get("consumed_start") and not st.get("consumed_end"):
-                if f.type == 1:
-                    st["underrun_frames"] += 1
-                    if not st["_in_underrun"]:
-                        st["underruns"] += 1; st["_in_underrun"] = True
-                        if len(st["underrun_at_s"]) < 20:   # position after the utterance's first consumed frame
-                            st["underrun_at_s"].append(round(time.time() - st["consumed_start"], 3))
+    def counting_get_audio_frame():
+        frame = original_get_audio_frame()
+        utterance_stats = ACTIVE_UTTERANCES.get(session_id)
+        if utterance_stats is not None:
+            userdata = frame.userdata or {}
+            mine = userdata.get("cyber_gf_utt") == utterance_stats["utt"]
+            if mine and userdata.get("status") == "start":
+                utterance_stats["consumed_start"] = time.time()
+            elif utterance_stats.get("consumed_start") and not utterance_stats.get("consumed_end"):
+                if frame.type == 1:
+                    utterance_stats["underrun_frames"] += 1
+                    if not utterance_stats["_in_underrun"]:
+                        utterance_stats["underruns"] += 1; utterance_stats["_in_underrun"] = True
+                        if len(utterance_stats["underrun_at_s"]) < 20:   # position after the utterance's first consumed frame
+                            utterance_stats["underrun_at_s"].append(round(time.time() - utterance_stats["consumed_start"], 3))
                 else:
-                    st["_in_underrun"] = False
-            if mine and ud.get("status") == "end":
-                st["consumed_end"] = time.time()
-        return f
+                    utterance_stats["_in_underrun"] = False
+            if mine and userdata.get("status") == "end":
+                utterance_stats["consumed_end"] = time.time()
+        return frame
 
-    asr.get_audio_frame = wrapped
-    asr._cyber_gf_wrapped = True
+    session_asr.get_audio_frame = counting_get_audio_frame
+    session_asr._cyber_gf_wrapped = True
 
 
-def _listen(sid, sess):
+def _listen_for_playback(session_id, session):
     """Record when LiveTalking actually plays our start/end frames (BaseAvatar.notify -> msgqueues)."""
-    if sid in LISTENERS:
+    if session_id in PLAYBACK_LISTENERS:
         return
-    q = queue.Queue()
-    sess.add_msgqueue(q)
+    message_queue = queue.Queue()
+    session.add_msgqueue(message_queue)
 
-    def loop():
-        while session_manager.get_session(sid) is sess:
+    def read_messages():
+        while session_manager.get_session(session_id) is session:
             try:
-                msg = json.loads(q.get(timeout=1))
+                message = json.loads(message_queue.get(timeout=1))
             except queue.Empty:
                 continue
             except Exception:
                 continue
-            st = UTTS.get(msg.get("cyber_gf_utt"))
-            if st is not None:
-                st["playback_" + msg.get("status", "?")] = time.time()
-        LISTENERS.pop(sid, None)
+            utterance_stats = UTTERANCE_STATS.get(message.get("cyber_gf_utt"))
+            if utterance_stats is not None:
+                utterance_stats["playback_" + message.get("status", "?")] = time.time()
+        PLAYBACK_LISTENERS.pop(session_id, None)
 
-    LISTENERS[sid] = threading.Thread(target=loop, daemon=True)
-    LISTENERS[sid].start()
+    PLAYBACK_LISTENERS[session_id] = threading.Thread(target=read_messages, daemon=True)
+    PLAYBACK_LISTENERS[session_id].start()
+
+
+def _split_frames(samples):
+    return [samples[i * FRAME:(i + 1) * FRAME].copy() for i in range(len(samples) // FRAME)]
 
 
 async def audio_stream(request):
-    sid = request.query.get("sessionid", "")
-    utt = request.query.get("utt") or uuid.uuid4().hex[:12]
-    sess = session_manager.get_session(sid)
-    if sess is None:
+    session_id = request.query.get("sessionid", "")
+    utterance_id = request.query.get("utt") or uuid.uuid4().hex[:12]
+    session = session_manager.get_session(session_id)
+    if session is None:
         return web.json_response({"code": -1, "msg": "session not found"})
-    _instrument(sid, sess); _listen(sid, sess)
-    asr = sess.asr
-    st = {"utt": utt, "sessionid": sid, "request_at": time.time(), "first_frame_put": None, "last_frame_put": None,
+    _install_underrun_counter(session_id, session); _listen_for_playback(session_id, session)
+    session_asr = session.asr
+    utterance_stats = {"utt": utterance_id, "sessionid": session_id, "request_at": time.time(), "first_frame_put": None, "last_frame_put": None,
           "frames": 0, "bytes": 0, "max_queue_frames": 0, "overflows": 0, "underruns": 0, "underrun_frames": 0, "underrun_at_s": [],
           "_in_underrun": False, "http_chunks": 0}
-    _remember(st); ACTIVE[sid] = st
+    _record_utterance(utterance_stats); ACTIVE_UTTERANCES[session_id] = utterance_stats
 
     state = {"first": True}
 
@@ -148,93 +151,90 @@ async def audio_stream(request):
         with a 10 ms get() timeout; with per-frame put() calls the ASR thread could take the 'start' frame and then
         time out (GIL contention) before the next put(), inserting silence (measured: 2 frames at +0.01 s)."""
         items = []
-        for f in frames:
-            ev = {}
+        for frame in frames:
+            event = {}
             if state["first"]:
-                ev = {"status": "start", "cyber_gf_utt": utt}; state["first"] = False; st["first_frame_put"] = time.time()
-            items.append(AudioFrameData(data=f, type=0, userdata=ev))
+                event = {"status": "start", "cyber_gf_utt": utterance_id}; state["first"] = False; utterance_stats["first_frame_put"] = time.time()
+            items.append(AudioFrameData(data=frame, type=0, userdata=event))
         if end:
             items.append(AudioFrameData(data=np.zeros(FRAME, np.float32), type=0,
-                                        userdata={"status": "end", "cyber_gf_utt": utt}))   # as tts/qwentts.py
-        q = asr.queue
-        with q.mutex:
-            for it in items:
-                q._put(it); q.unfinished_tasks += 1
-            q.not_empty.notify_all()
-        n = q.qsize()
-        st["max_queue_frames"] = max(st["max_queue_frames"], n)
-        if n > OVERFLOW_FRAMES:
-            st["overflows"] += 1
-        st["frames"] += len(frames); st["last_frame_put"] = time.time()
-
-    def split(pcm):
-        return [pcm[i * FRAME:(i + 1) * FRAME].copy() for i in range(len(pcm) // FRAME)]
+                                        userdata={"status": "end", "cyber_gf_utt": utterance_id}))   # as tts/qwentts.py
+        asr_queue = session_asr.queue
+        with asr_queue.mutex:
+            for item in items:
+                asr_queue._put(item); asr_queue.unfinished_tasks += 1
+            asr_queue.not_empty.notify_all()
+        queue_size = asr_queue.qsize()
+        utterance_stats["max_queue_frames"] = max(utterance_stats["max_queue_frames"], queue_size)
+        if queue_size > OVERFLOW_FRAMES:
+            utterance_stats["overflows"] += 1
+        utterance_stats["frames"] += len(frames); utterance_stats["last_frame_put"] = time.time()
 
     # Pre-roll: the first TTS chunk (~0.62 s after resampling) reaches us as several TCP reads a few ms apart.
     # Releasing the first batch only once PREROLL_FRAMES are buffered keeps MelASR (10 ms get() timeout) from
     # starving between those reads (measured: 1 silence frame at +0.01 s without it). Costs ~0 latency.
-    preroll = int(request.query.get("preroll_frames", PREROLL_FRAMES))
-    buf = b""
-    async for data in request.content.iter_any():
-        st["http_chunks"] += 1; st["bytes"] += len(data)
-        buf += data
-        n = len(buf) // FRAME_BYTES
-        if n and not (state["first"] and n < preroll):
-            put_batch(split(np.frombuffer(buf[:n * FRAME_BYTES], dtype="<f4")))
-            buf = buf[n * FRAME_BYTES:]
-    tail = []
-    n = len(buf) // FRAME_BYTES                        # frames still held by the pre-roll (short answers)
-    if n:
-        tail += split(np.frombuffer(buf[:n * FRAME_BYTES], dtype="<f4")); buf = buf[n * FRAME_BYTES:]
-    if buf:                                            # partial last frame -> zero-pad
-        pad = np.zeros(FRAME, np.float32)
-        pad[:len(buf) // 4] = np.frombuffer(buf[:len(buf) // 4 * 4], dtype="<f4")
-        tail.append(pad)
-    if state["first"] and not tail:                    # no audio at all
-        return web.json_response({"code": -1, "msg": "empty audio stream", "data": _public(st)})
-    put_batch(tail, end=True)
-    st["eof_at"] = time.time(); st["audio_s"] = round(st["frames"] * 0.02, 3)
-    logger.info("[cyber_gf] utt=%s frames=%d audio=%.2fs max_queue=%d", utt, st["frames"], st["audio_s"], st["max_queue_frames"])
-    return web.json_response({"code": 0, "msg": "ok", "data": _public(st)})
+    preroll_frames = int(request.query.get("preroll_frames", PREROLL_FRAMES))
+    pending_bytes = b""
+    async for chunk in request.content.iter_any():
+        utterance_stats["http_chunks"] += 1; utterance_stats["bytes"] += len(chunk)
+        pending_bytes += chunk
+        frame_count = len(pending_bytes) // FRAME_BYTES
+        if frame_count and not (state["first"] and frame_count < preroll_frames):
+            put_batch(_split_frames(np.frombuffer(pending_bytes[:frame_count * FRAME_BYTES], dtype="<f4")))
+            pending_bytes = pending_bytes[frame_count * FRAME_BYTES:]
+    tail_frames = []
+    frame_count = len(pending_bytes) // FRAME_BYTES                        # frames still held by the pre-roll (short answers)
+    if frame_count:
+        tail_frames += _split_frames(np.frombuffer(pending_bytes[:frame_count * FRAME_BYTES], dtype="<f4")); pending_bytes = pending_bytes[frame_count * FRAME_BYTES:]
+    if pending_bytes:                                            # partial last frame -> zero-pad
+        padded_frame = np.zeros(FRAME, np.float32)
+        padded_frame[:len(pending_bytes) // 4] = np.frombuffer(pending_bytes[:len(pending_bytes) // 4 * 4], dtype="<f4")
+        tail_frames.append(padded_frame)
+    if state["first"] and not tail_frames:                    # no audio at all
+        return web.json_response({"code": -1, "msg": "empty audio stream", "data": _public(utterance_stats)})
+    put_batch(tail_frames, end=True)
+    utterance_stats["eof_at"] = time.time(); utterance_stats["audio_s"] = round(utterance_stats["frames"] * 0.02, 3)
+    logger.info("[cyber_gf] utt=%s frames=%d audio=%.2fs max_queue=%d", utterance_id, utterance_stats["frames"], utterance_stats["audio_s"], utterance_stats["max_queue_frames"])
+    return web.json_response({"code": 0, "msg": "ok", "data": _public(utterance_stats)})
 
 
-def _public(st):
-    return {k: v for k, v in st.items() if not k.startswith("_")}
+def _public(utterance_stats):
+    return {k: v for k, v in utterance_stats.items() if not k.startswith("_")}
 
 
 async def utt_status(request):
-    st = UTTS.get(request.match_info["utt"])
-    if st is None:
+    utterance_stats = UTTERANCE_STATS.get(request.match_info["utt"])
+    if utterance_stats is None:
         return web.json_response({"code": -1, "msg": "unknown utt"})
-    sess = session_manager.get_session(st["sessionid"])
-    data = _public(st)
-    data["queue_frames_now"] = sess.asr.queue.qsize() if sess is not None else None
-    data["lt_fps"] = dict(FPS)
+    session = session_manager.get_session(utterance_stats["sessionid"])
+    data = _public(utterance_stats)
+    data["queue_frames_now"] = session.asr.queue.qsize() if session is not None else None
+    data["lt_fps"] = dict(LIVETALKING_FPS)
     return web.json_response({"code": 0, "msg": "ok", "data": data})
 
 
-async def stats(request):
-    sessions = [{"sessionid": sid, "avatar_id": getattr(getattr(s, "opt", None), "avatar_id", ""),
-                 "queue_frames": s.asr.queue.qsize(), "speaking": s.is_speaking()}
-                for sid, s in session_manager.sessions.items() if s is not None]
-    return web.json_response({"code": 0, "msg": "ok", "data": {"sessions": sessions, "lt_fps": dict(FPS), "cuda_mem_gb": _cuda_mem(),
-                              "recent_utts": [_public(u) for u in list(UTTS.values())[-5:]]}})
+async def stats_route(request):
+    sessions = [{"sessionid": session_id, "avatar_id": getattr(getattr(session, "opt", None), "avatar_id", ""),
+                 "queue_frames": session.asr.queue.qsize(), "speaking": session.is_speaking()}
+                for session_id, session in session_manager.sessions.items() if session is not None]
+    return web.json_response({"code": 0, "msg": "ok", "data": {"sessions": sessions, "lt_fps": dict(LIVETALKING_FPS), "cuda_mem_gb": _cuda_mem(),
+                              "recent_utts": [_public(utterance) for utterance in list(UTTERANCE_STATS.values())[-5:]]}})
 
 
 def _cuda_mem():
     """This process's PyTorch CUDA memory (GB): what LiveTalking itself holds, as opposed to the whole WSL VM."""
     try:
         import torch
-        g = 1 << 30
-        return {"allocated": round(torch.cuda.memory_allocated() / g, 2), "reserved": round(torch.cuda.memory_reserved() / g, 2),
-                "max_allocated": round(torch.cuda.max_memory_allocated() / g, 2), "max_reserved": round(torch.cuda.max_memory_reserved() / g, 2)}
-    except Exception as e:
-        return {"error": str(e)}
+        bytes_per_gib = 1 << 30
+        return {"allocated": round(torch.cuda.memory_allocated() / bytes_per_gib, 2), "reserved": round(torch.cuda.memory_reserved() / bytes_per_gib, 2),
+                "max_allocated": round(torch.cuda.max_memory_allocated() / bytes_per_gib, 2), "max_reserved": round(torch.cuda.max_memory_reserved() / bytes_per_gib, 2)}
+    except Exception as error:
+        return {"error": str(error)}
 
 
 def _latest_session():
     """The vendor protocol carries no sessionid: play on the most recently opened LiveTalking session."""
-    live = [s for s in session_manager.sessions.values() if s is not None]
+    live = [session for session in session_manager.sessions.values() if session is not None]
     return live[-1] if live else None
 
 
@@ -243,35 +243,35 @@ def _latest_session():
 # Only sessions opened with an emotion avatar (id starts with EMOTION_PREFIX) are switched; other avatars are left alone.
 async def emotion_route(request):
     """POST/GET /cyber_gf/emotion?sessionid=..&emotion=happy  (frontend test selector; same switch the vendor path uses)"""
-    q = request.query
-    sess = session_manager.sessions.get(q.get("sessionid", "")) if q.get("sessionid") else _latest_session()
-    if sess is None:
+    query = request.query
+    session = session_manager.sessions.get(query.get("sessionid", "")) if query.get("sessionid") else _latest_session()
+    if session is None:
         return web.json_response({"code": -1, "msg": "session not found"})
-    aid = set_emotion(sess, q.get("emotion", "neutral"))
-    if aid is None:
+    avatar_id = set_emotion(session, query.get("emotion", "neutral"))
+    if avatar_id is None:
         return web.json_response({"code": -1, "msg": "session avatar is not an emotion avatar (%s*)" % EMOTION_PREFIX})
-    return web.json_response({"code": 0, "msg": "ok", "data": {"avatar_id": aid}})
+    return web.json_response({"code": 0, "msg": "ok", "data": {"avatar_id": avatar_id}})
 
 
-vendor = VendorReceiver(_latest_session, lambda data, ud: AudioFrameData(data=data, type=0, userdata=ud), on_emotion=set_emotion)
+vendor_receiver = VendorReceiver(_latest_session, lambda data, userdata: AudioFrameData(data=data, type=0, userdata=userdata), on_emotion=set_emotion)
 
-def _find_session(sid):
+def _find_session(session_id):
     """Framed link: the named session if it exists, else the most recently opened one."""
-    if sid and session_manager.get_session(sid) is not None:
-        return sid, session_manager.get_session(sid)
-    live = [(k, v) for k, v in session_manager.sessions.items() if v is not None]
+    if session_id and session_manager.get_session(session_id) is not None:
+        return session_id, session_manager.get_session(session_id)
+    live = [(key, session) for key, session in session_manager.sessions.items() if session is not None]
     return live[-1] if live else (None, None)
 
 
 async def _start_framed(app):
     """TCP framed receiver (BEGIN/AUDIO/END, STATUS back) in this process; disabled with downstream.enabled: false."""
-    c = imood_cfg.load().get("downstream", {})
-    if not c.get("enabled", True):
+    config = imood_cfg.load().get("downstream", {})
+    if not config.get("enabled", True):
         return
     handler = framed_receiver.make_handler(audio_stream, _find_session, set_emotion,
-                                           lambda u: _public(UTTS[u]) if u in UTTS else None)
-    app["imood_framed"] = await asyncio.start_server(handler, c.get("bind", "127.0.0.1"), int(c.get("port", 8100)))
-    logger.info("[cyber_gf] framed downstream receiver on %s:%s", c.get("bind", "127.0.0.1"), c.get("port", 8100))
+                                           lambda utterance_id: _public(UTTERANCE_STATS[utterance_id]) if utterance_id in UTTERANCE_STATS else None)
+    app["imood_framed"] = await asyncio.start_server(handler, config.get("bind", "127.0.0.1"), int(config.get("port", 8100)))
+    logger.info("[cyber_gf] framed downstream receiver on %s:%s", config.get("bind", "127.0.0.1"), config.get("port", 8100))
 
 
 _orig_setup_routes = lt_routes.setup_routes
@@ -281,10 +281,10 @@ def setup_routes_with_cyber_gf(app):
     # project routes first: upstream registers a catch-all static '/' at the end of setup_routes
     app.router.add_post("/cyber_gf/audio_stream", audio_stream)
     app.router.add_get("/cyber_gf/utt/{utt}", utt_status)
-    app.router.add_get("/cyber_gf/stats", stats)
+    app.router.add_get("/cyber_gf/stats", stats_route)
     app.router.add_post("/cyber_gf/emotion", emotion_route)
     app.router.add_get("/cyber_gf/emotion", emotion_route)
-    app.router.add_get("/cyber_gf/voice", vendor.handle)     # vendor real-time voice WebSocket (docs/vendor_voice_receiver.md)
+    app.router.add_get("/cyber_gf/voice", vendor_receiver.handle)     # vendor real-time voice WebSocket (docs/vendor_voice_receiver.md)
     app.router.add_static("/imood/", path=str(PROJECT / "web"), show_index=False)
     app.on_startup.append(_start_framed)
     logger.info("[cyber_gf] adapter routes registered: /cyber_gf/audio_stream, /cyber_gf/utt/{utt}, /cyber_gf/stats, /imood/")
