@@ -4,7 +4,7 @@ A. VRAM at each stage (whole GPU via nvidia-smi + torch allocator view)
 B. Runtime verification: device / dtype per component, attention backend, SDPA kernels (profiler),
    CPU fallback, GPU + CPU utilisation during synthesis, generation parameters
 C. Fixed-text benchmark: warm-up + N measured runs, same seed, same ref prompt
-D. Streaming: installed qwen-tts has no streaming generation API -> we measure, via runtime hooks only,
+D. Streaming: installed qwen-tts has no streaming generation API -> measured via runtime hooks only:
    when the first codec frames exist and how long decoding a first chunk takes (lower bound for any
    streaming implementation of this runtime)
 
