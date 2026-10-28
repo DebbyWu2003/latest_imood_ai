@@ -138,7 +138,7 @@ def main():
     cands = {"ref.wav (self)": ref_audio,
              "BASELINE qwen-tts fixed_run1": ROOT / "outputs/perf/fixed_run1.wav",
              "BASELINE qwen-tts fixed_run2": ROOT / "outputs/perf/fixed_run2.wav",
-             "BASELINE Step9 reply.wav": ROOT / "outputs/voice_test/reply.wav",
+             "BASELINE voice_test reply.wav": ROOT / "outputs/voice_test/reply.wav",
              "FAST non-stream run1": OUT / "fast_nonstream_run1.wav",
              "FAST non-stream run2": OUT / "fast_nonstream_run2.wav",
              "FAST stream cs8 run1": OUT / "fast_stream_cs8_run1.wav",

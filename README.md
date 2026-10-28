@@ -62,7 +62,7 @@ user WAV (browser upload)
 avatar image → ComfyUI + Wan2.2 image-to-video → assets/avatar/idle.mp4 → LiveTalking avatar preprocessing (wav2lip256_myavatar)
 assets/ref.wav + config/ref_text.txt → Qwen3-TTS-12Hz-1.7B-Base voice cloning (ICL prompt, built once at service start)
 ```
-Details: [docs/architecture.md](docs/architecture.md), [docs/step12_v2.md](docs/step12_v2.md).
+Details: [docs/architecture.md](docs/architecture.md), [docs/streaming_service.md](docs/streaming_service.md).
 
 ## Requirements / external dependencies
 **In this repo:** integration code, launchers, configs, the imood frontend page, docs, and small assets (reference voice, test question, avatar image, `idle.mp4`).
@@ -154,7 +154,7 @@ RTX 4090 24 GB, WSL2 Ubuntu-24.04, `assets/test.wav` (3.84 s), 5 consecutive run
 | LiveTalking | final 25.0 fps, inference 98–115 fps; 0 underruns / 0 overflows (5 of 5 runs, and 5 of 5 again after a cold start via the repo launchers: speaking start 2.87–3.70 s) |
 | VRAM (full stack) | about 23.3 GB of 24 GB (llama-server ~10.0 GB; voice service + LiveTalking ~9–11 GB; desktop ~1.5 GB) |
 
-Method and measurements: [docs/step12_v2.md](docs/step12_v2.md).
+Method and measurements: [docs/streaming_service.md](docs/streaming_service.md).
 
 ## Known issues
 - **Remote-desktop viewing can stutter** even though recordings are smooth and in sync and the server renders a steady 25 fps. The imood page shows live WebRTC receive stats (fps, dropped frames, freezes, jitter) under 診斷資訊 for diagnosis.
@@ -183,7 +183,7 @@ cyber_gf/
 | Doc | Content |
 |---|---|
 | [docs/architecture.md](docs/architecture.md) | Current architecture, asset preparation, fallbacks |
-| [docs/step12_v2.md](docs/step12_v2.md) | Streaming design, LiveTalking source analysis, adapter, measurements, start/stop, fallback |
+| [docs/streaming_service.md](docs/streaming_service.md) | Streaming design, LiveTalking source analysis, adapter, measurements, start/stop, fallback |
 | [docs/components.md](docs/components.md) | External components, versions, sources |
 | [docs/modes.md](docs/modes.md) | The two modes: start, structure, tests, settings |
 

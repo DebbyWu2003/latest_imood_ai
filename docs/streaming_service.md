@@ -137,12 +137,12 @@ On the reference machine, two unrelated GPU services (a CosyVoice TTS on :8001 a
   - WSL only: `wsl -d Ubuntu-24.04 -- bash <repo-in-wsl>/scripts/wsl/start_avatar_services.sh`
 - **Stop:** `scripts\windows\stop_avatar_services.bat` stops **everything** (both WSL services and llama-server) and prints the remaining VRAM (desktop only, about 1.5 GB).
 - **Logs:** `/root/lt_logs/lt_cyber_gf.log` (LiveTalking + adapter), `logs/voice_service.log`.
-- **Headless test:** `wsl -d Ubuntu-24.04 -- bash -c "source /root/livetalking/LiveTalking/.venv-lt/bin/activate && cd <repo-in-wsl> && python scripts/wsl/perf/step12_v2_e2e_test.py [--mode full|sentence]"`
+- **Headless test:** `wsl -d Ubuntu-24.04 -- bash -c "source /root/livetalking/LiveTalking/.venv-lt/bin/activate && cd <repo-in-wsl> && python scripts/wsl/perf/streaming_e2e_test.py [--mode full|sentence]"`
 
 ## Fall back to the Step 12 MVP
 1. `scripts\windows\stop_avatar_services.bat` (this also stops llama-server), then start llama again with `scripts\windows\start_llama.bat`. The v2 voice service must be stopped because running both would not fit in 24 GB.
 2. Start LiveTalking the MVP way: `wsl -d Ubuntu-24.04 -- bash <repo-in-wsl>/scripts/wsl/lt_test_start.sh`, or keep the v2 launcher alone, since upstream `/humanaudio` is unchanged.
-3. Open http://localhost:8010/index.html → connect, then run `scripts\windows\run_step12_mvp.bat`.
+3. Open http://localhost:8010/index.html → connect, then run `scripts\windows\run_batch_reply.bat`.
 
 ## Not done (as instructed)
 Microphone capture, VAD, interruption (`/interrupt_talk` exists upstream), and reducing LiveTalking's internal ~1.1 s pipeline latency.

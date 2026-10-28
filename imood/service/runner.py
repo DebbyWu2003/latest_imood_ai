@@ -15,7 +15,7 @@ from imood.emotion.udp_client import EmotionClientSync
 from imood.intake import transcriber
 from imood.service.state import CFG, LT, M, ROOT, V2
 from imood.voice import tts_voice
-from step12_mvp import discover_session, lt_get
+from batch_reply import discover_session, lt_get
 
 
 def _emotion_client():

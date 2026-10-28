@@ -4,14 +4,14 @@
              -> POST /humanaudio to the active LiveTalking WebRTC session -> wav2lip256_myavatar speaks
 
 ASR settings, LLM call (llm_stream) and persona/ref loading are reused from the Step 9 script.
-Run via scripts/wsl/run_step12_mvp.sh (Ubuntu-24.04, .venv-tts-fast).
+Run via scripts/wsl/run_batch_reply.sh (Ubuntu-24.04, .venv-tts-fast).
 """
 import argparse, datetime, json, os, sys, time, urllib.request, uuid
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-from voice_pipeline_test import load_cfg, llm_stream   # Step 9: config/persona/ref_text loader + streaming LLM call
+from voice_pipeline_bench import load_cfg, llm_stream   # Step 9: config/persona/ref_text loader + streaming LLM call
 
 ROOT = HERE.parents[1]
 

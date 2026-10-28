@@ -1,4 +1,4 @@
-"""Parallel HTTP range downloader: python pdl.py URL OUT [connections]"""
+"""Parallel HTTP range downloader: python parallel_download.py URL OUT [connections]"""
 import os, sys, threading, urllib.request, time
 
 url, out = sys.argv[1], sys.argv[2]

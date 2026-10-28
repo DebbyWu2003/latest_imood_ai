@@ -4,7 +4,7 @@
 
 Model loading and the voice-clone prompt are built once and timed separately; the per-run
 timings (ASR, LLM first token / done, TTS, end-to-end) exclude them.
-Run through scripts/wsl/run_voice_test.sh (sets CUDA library paths for CTranslate2).
+Run through scripts/wsl/run_voice_pipeline_bench.sh (sets CUDA library paths for CTranslate2).
 """
 import argparse, json, re, subprocess, sys, threading, time, urllib.request
 from pathlib import Path

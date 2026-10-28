@@ -4,7 +4,7 @@ Connects to LiveTalking over WebRTC exactly like web/imood_ai.html (POST /offer)
 recorder, submits a question WAV to the voice service (same call the page makes), and records what a
 WebRTC viewer actually receives: 48 kHz audio + video frame arrival times.
 Then reports audible gaps inside the spoken answer, received video fps, and the job metrics.
-Run with the LiveTalking venv (has aiortc):  python step12_v2_e2e_test.py [--mode sentence|full] [--in wav]
+Run with the LiveTalking venv (has aiortc):  python streaming_e2e_test.py [--mode sentence|full] [--in wav]
 """
 import argparse, asyncio, json, sys, time, urllib.request
 from pathlib import Path

@@ -110,10 +110,10 @@
     },
     "model_cache": "/root/.cache/huggingface/hub",
     "config": "config/voice.json",
-    "run": "scripts/wsl/run_voice_test.sh"
+    "run": "scripts/wsl/run_voice_pipeline_bench.sh"
   },
   "streaming_service": {
-    "doc": "docs/step12_v2.md",
+    "doc": "docs/streaming_service.md",
     "voice_service": {
       "script": "scripts/wsl/voice_service.py",
       "venv": "/root/cyber_gf/.venv-tts-fast",

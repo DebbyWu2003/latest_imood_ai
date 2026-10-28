@@ -1,6 +1,6 @@
 # Architecture
 
-Current demo: **Step 12 v2**. Full design notes, including LiveTalking source analysis and measurements, are in [step12_v2.md](step12_v2.md).
+Current demo: **Step 12 v2**. Full design notes, including LiveTalking source analysis and measurements, are in [streaming_service.md](streaming_service.md).
 
 ## Runtime (per question)
 ```
@@ -42,5 +42,5 @@ reference voice: assets/ref.wav (6 s, 24 kHz mono) + config/ref_text.txt (its ex
 ```
 
 ## Fallbacks kept in the repo
-- **Step 12 MVP** (non-streaming): `scripts/windows/run_step12_mvp.bat` synthesizes the full `reply.wav` and POSTs it to upstream `/humanaudio`.
-- **Original Qwen3-TTS backend** (`qwen-tts` 0.1.1, `.venv-voice`, RTF ≈ 3.1): `scripts/wsl/run_voice_test.sh`.
+- **Step 12 MVP** (non-streaming): `scripts/windows/run_batch_reply.bat` synthesizes the full `reply.wav` and POSTs it to upstream `/humanaudio`.
+- **Original Qwen3-TTS backend** (`qwen-tts` 0.1.1, `.venv-voice`, RTF ≈ 3.1): `scripts/wsl/run_voice_pipeline_bench.sh`.
