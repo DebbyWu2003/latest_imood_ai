@@ -65,99 +65,122 @@ def _transcribe(job, asr_config):
     job.mark("asr_done"); job.metrics["input_audio_s"] = round(duration, 2)
 
 
+class _AudioPipeline:
+    """Reply text -> TTS (producer thread) -> audio queue -> LiveTalking (sender thread).
+
+    The reply text also goes to the emotion service at the same moment as to TTS; the first audio chunk takes the
+    emotion result if it is ready, otherwise the default (never waited for).
+    """
+
+    def __init__(self, job, base, tts_config, tts_fast_config):
+        import soxr
+        self.job, self.base = job, base
+        self.utterance_id = job.id
+        self.text_queue, self.audio_queue = queue.Queue(), queue.Queue()
+        self.resampler = soxr.ResampleStream(SERVICE_CONFIG["resample"]["from_hz"], SERVICE_CONFIG["resample"]["to_hz"], 1, dtype="float32")
+        self.raw_24k_chunks, self.sent_16k_chunks = [], []
+        self.stats = {"tts_chunks": 0, "audio_q_max": 0, "tts_segments": 0}
+        self.tts_kwargs = dict(language=tts_config["language"], ref_audio=str(ROOT / tts_config["ref_audio"]), ref_text=VOICE_CONFIG["ref_text"],
+                               xvec_only=tts_fast_config["xvec_only"], append_silence=tts_fast_config["append_silence"],
+                               chunk_size=tts_fast_config["chunk_size"])
+        self.downstream_config = cfgmod.load().get("downstream", {})
+        self.framed = self.downstream_config.get("transport", "framed") == "framed" and self.downstream_config.get("enabled", True)
+        self.emotion_state = {"client": _emotion_client(), "decided": False, "started": False}
+        self.sender_result = {}
+        self.producer_thread = None
+        self.sender_thread = None
+
+    def start(self):
+        self.producer_thread = threading.Thread(target=self._produce_audio, daemon=True)
+        self.sender_thread = threading.Thread(target=self._send_audio, daemon=True)
+        self.producer_thread.start(); self.sender_thread.start()
+
+    def submit_segment(self, text):
+        emotion_state = self.emotion_state
+        if emotion_state["client"] is not None and not emotion_state["started"]:          # reply text goes to BERT and TTS at the same moment
+            emotion_state["started"] = True
+            emotion_state["client"].start(text)
+        self.text_queue.put(text)
+
+    def _enqueue_audio(self, chunk):
+        emotion_state = self.emotion_state
+        if not emotion_state["decided"]:                          # first audio chunk: take BERT's answer if ready, else the default
+            emotion_state["decided"] = True
+            if emotion_state["client"] is not None:
+                code, ready = emotion_state["client"].result()
+                vendor = code_to_vendor(code)
+                self.job.metrics["emotion"] = {"code": code, "vendor": vendor, "bert_ready": ready}
+                if not self.framed:                                  # framed link carries the emotion in BEGIN
+                    threading.Thread(target=_switch_face, args=(self.base, self.job.sessionid, vendor), daemon=True).start()
+        self.audio_queue.put(chunk)
+        self.stats["audio_q_max"] = max(self.stats["audio_q_max"], self.audio_queue.qsize())
+
+    def _produce_audio(self):
+        job = self.job
+        try:
+            tts_voice.stream_segments(MODELS["tts"], self.tts_kwargs, self.text_queue, self.resampler, self._enqueue_audio,
+                                      self.stats, job.mark, self.raw_24k_chunks, self.sent_16k_chunks)
+            job.mark("tts_done")
+        except Exception as e:
+            job.error = f"TTS: {e}"; job.log.append(traceback.format_exc())
+        finally:
+            self.audio_queue.put(None)
+
+    def _audio_chunks(self):
+        while True:
+            chunk = self.audio_queue.get()
+            if chunk is None:
+                return
+            self.job.mark("first_audio_submitted")
+            yield chunk
+
+    def _send_http(self):
+        job = self.job
+        conn = http.client.HTTPConnection(self.base.split("//")[1], timeout=300)
+        conn.request("POST", f"/cyber_gf/audio_stream?sessionid={job.sessionid}&utt={self.utterance_id}", body=self._audio_chunks(),
+                     headers={"Content-Type": "application/octet-stream"}, encode_chunked=True)
+        self.sender_result.update(json.loads(conn.getresponse().read()))
+        job.mark("audio_stream_closed")
+
+    def _send_framed(self):
+        job, config = self.job, self.downstream_config
+        client = FramedClient(config.get("host", "127.0.0.1"), config.get("port", 8100))
+        client.open(on_status=lambda status: job.metrics.setdefault("downstream_status", []).append(status.get("state")))
+        first = True
+        try:
+            while True:
+                chunk = self.audio_queue.get()
+                if chunk is None:
+                    break
+                if first:                                   # emotion was decided before the first chunk was queued
+                    first = False
+                    job.mark("first_audio_submitted")
+                    client.begin(job.sessionid, self.utterance_id, (job.metrics.get("emotion") or {}).get("vendor", ""), text=job.reply)
+                client.audio_f32(chunk)
+            if not first:
+                client.end()
+                client.done.wait(180)
+                job.mark("audio_stream_closed")
+        finally:
+            client.close()
+
+    def _send_audio(self):
+        try:
+            (self._send_framed if self.framed else self._send_http)()
+        except Exception as e:
+            self.job.error = f"send: {e}"; self.job.log.append(traceback.format_exc())
+
+
 def run_job(job):
-    import numpy as np, soundfile as sf, soxr
+    import numpy as np, soundfile as sf
     a, c, tf = VOICE_CONFIG["asr"], VOICE_CONFIG["tts"], SERVICE_CONFIG["tts_fast"]
     out = _prepare_output_dir(job)
     base = LIVETALKING_CONFIG["url"]
     _resolve_session(job, base)
     _transcribe(job, a)
 
-    # ---- producer (TTS) / consumer (sender) plumbing
-    text_q, audio_q = queue.Queue(), queue.Queue()
-    utt = job.id
-    rs = soxr.ResampleStream(SERVICE_CONFIG["resample"]["from_hz"], SERVICE_CONFIG["resample"]["to_hz"], 1, dtype="float32")
-    raw24, sent16 = [], []
-    stat = {"tts_chunks": 0, "audio_q_max": 0, "tts_segments": 0}
-    tts_kw = dict(language=c["language"], ref_audio=str(ROOT / c["ref_audio"]), ref_text=VOICE_CONFIG["ref_text"],
-                  xvec_only=tf["xvec_only"], append_silence=tf["append_silence"], chunk_size=tf["chunk_size"])
-    dcfg = cfgmod.load().get("downstream", {})
-    framed = dcfg.get("transport", "framed") == "framed" and dcfg.get("enabled", True)
-    emo = {"client": _emotion_client(), "decided": False, "started": False}
-
-    def emit(b):
-        if not emo["decided"]:                          # first audio chunk: take BERT's answer if ready, else the default
-            emo["decided"] = True
-            if emo["client"] is not None:
-                code, ready = emo["client"].result()
-                vendor = code_to_vendor(code)
-                job.metrics["emotion"] = {"code": code, "vendor": vendor, "bert_ready": ready}
-                if not framed:                                  # framed link carries the emotion in BEGIN
-                    threading.Thread(target=_switch_face, args=(base, job.sessionid, vendor), daemon=True).start()
-        audio_q.put(b)
-        stat["audio_q_max"] = max(stat["audio_q_max"], audio_q.qsize())
-
-    def producer():
-        try:
-            tts_voice.stream_segments(MODELS["tts"], tts_kw, text_q, rs, emit, stat, job.mark, raw24, sent16)
-            job.mark("tts_done")
-        except Exception as e:
-            job.error = f"TTS: {e}"; job.log.append(traceback.format_exc())
-        finally:
-            audio_q.put(None)
-
-    sender_result = {}
-
-    def sender():
-        def body():
-            while True:
-                b = audio_q.get()
-                if b is None:
-                    return
-                job.mark("first_audio_submitted")
-                yield b
-
-        def send_http():
-            conn = http.client.HTTPConnection(base.split("//")[1], timeout=300)
-            conn.request("POST", f"/cyber_gf/audio_stream?sessionid={job.sessionid}&utt={utt}", body=body(),
-                         headers={"Content-Type": "application/octet-stream"}, encode_chunked=True)
-            sender_result.update(json.loads(conn.getresponse().read()))
-            job.mark("audio_stream_closed")
-
-        def send_framed():
-            cl = FramedClient(dcfg.get("host", "127.0.0.1"), dcfg.get("port", 8100))
-            cl.open(on_status=lambda st: job.metrics.setdefault("downstream_status", []).append(st.get("state")))
-            first = True
-            try:
-                while True:
-                    b = audio_q.get()
-                    if b is None:
-                        break
-                    if first:                                   # emotion was decided before the first chunk was queued
-                        first = False
-                        job.mark("first_audio_submitted")
-                        cl.begin(job.sessionid, utt, (job.metrics.get("emotion") or {}).get("vendor", ""), text=job.reply)
-                    cl.audio_f32(b)
-                if not first:
-                    cl.end()
-                    cl.done.wait(180)
-                    job.mark("audio_stream_closed")
-            finally:
-                cl.close()
-
-        try:
-            (send_framed if framed else send_http)()
-        except Exception as e:
-            job.error = f"send: {e}"; job.log.append(traceback.format_exc())
-
-    def to_tts(s):
-        if emo["client"] is not None and not emo["started"]:          # reply text goes to BERT and TTS at the same moment
-            emo["started"] = True
-            emo["client"].start(s)
-        text_q.put(s)
-
-    tp, ts_ = threading.Thread(target=producer, daemon=True), threading.Thread(target=sender, daemon=True)
-    tp.start(); ts_.start()
+    pipeline = _AudioPipeline(job, base, c, tf)
+    pipeline.start()
 
     # ---- LLM (streamed) -> segments
     job.state = "thinking"
@@ -168,13 +191,13 @@ def run_job(job):
         job.reply += d
         if sentence_mode:
             for s in seg.feed(d):
-                job.segments.append(s); job.mark("first_segment_ready"); to_tts(s); job.state = "synthesizing"
+                job.segments.append(s); job.mark("first_segment_ready"); pipeline.submit_segment(s); job.state = "synthesizing"
     job.mark("llm_done")
     rest = seg.flush() if sentence_mode else [job.reply]
     for s in rest:
         if s:
-            job.segments.append(s); job.mark("first_segment_ready"); to_tts(s)
-    text_q.put(None)
+            job.segments.append(s); job.mark("first_segment_ready"); pipeline.submit_segment(s)
+    pipeline.text_queue.put(None)
     job.state = "synthesizing"
     assert "".join(job.segments) == job.reply, "segmentation must preserve the exact reply text"
 
@@ -182,7 +205,7 @@ def run_job(job):
     deadline = time.time() + 120
     while time.time() < deadline:
         try:
-            u = lt_get(base, f"/cyber_gf/utt/{utt}")
+            u = lt_get(base, f"/cyber_gf/utt/{pipeline.utterance_id}")
         except Exception:
             u = {}
         d = u.get("data") or {}
@@ -192,18 +215,18 @@ def run_job(job):
             job.mark("avatar_speaking_start", d["playback_start"]); job.state = "speaking"
         if d.get("playback_end"):
             job.mark("avatar_speaking_end", d["playback_end"]); job.metrics["livetalking"] = d; break
-        if job.error and not tp.is_alive() and not ts_.is_alive():
+        if job.error and not pipeline.producer_thread.is_alive() and not pipeline.sender_thread.is_alive():
             break
         time.sleep(0.05)
-    tp.join(5); ts_.join(5)
+    pipeline.producer_thread.join(5); pipeline.sender_thread.join(5)
 
-    audio16 = np.concatenate(sent16) if sent16 else np.zeros(0, np.float32)
-    audio24 = np.concatenate(raw24) if raw24 else np.zeros(0, np.float32)
+    audio16 = np.concatenate(pipeline.sent_16k_chunks) if pipeline.sent_16k_chunks else np.zeros(0, np.float32)
+    audio24 = np.concatenate(pipeline.raw_24k_chunks) if pipeline.raw_24k_chunks else np.zeros(0, np.float32)
     sf.write(str(out / "reply_24k_tts.wav"), audio24, 24000)
     sf.write(str(out / "reply_16k_sent.wav"), audio16, 16000)
-    lt_d = job.metrics.get("livetalking") or sender_result.get("data") or {}
+    lt_d = job.metrics.get("livetalking") or pipeline.sender_result.get("data") or {}
     job.metrics.update({
-        "tts_chunks": stat["tts_chunks"], "tts_segments": stat["tts_segments"], "service_audio_queue_max": stat["audio_q_max"],
+        "tts_chunks": pipeline.stats["tts_chunks"], "tts_segments": pipeline.stats["tts_segments"], "service_audio_queue_max": pipeline.stats["audio_q_max"],
         "audio_s_tts_24k": round(len(audio24) / 24000, 3), "audio_s_sent_16k": round(len(audio16) / 16000, 3),
         "lt_frames": lt_d.get("frames"), "lt_max_queue_frames": lt_d.get("max_queue_frames"),
         "lt_underruns": lt_d.get("underruns"), "lt_underrun_frames": lt_d.get("underrun_frames"),
