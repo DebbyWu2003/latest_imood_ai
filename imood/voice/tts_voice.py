@@ -6,42 +6,42 @@ import numpy as np
 from imood.dialogue.segmenter import Segmenter
 
 
-def load(c, tf, ref_audio, ref_text):
+def load(tts_config, fast_config, ref_audio, ref_text):
     import torch
     from faster_qwen3_tts import FasterQwen3TTS
-    s = {}
-    t = time.perf_counter()
-    tts = FasterQwen3TTS.from_pretrained(c["model"], device="cuda", dtype=getattr(torch, c["dtype"]),
-                                         attn_implementation=c["attn_implementation"], max_seq_len=tf["max_seq_len"])
+    timings = {}
+    started = time.perf_counter()
+    tts = FasterQwen3TTS.from_pretrained(tts_config["model"], device="cuda", dtype=getattr(torch, tts_config["dtype"]),
+                                         attn_implementation=tts_config["attn_implementation"], max_seq_len=fast_config["max_seq_len"])
     tts.warmup(prefill_len=100)
-    s["tts_load_and_graph_capture_s"] = round(time.perf_counter() - t, 2)
-    t = time.perf_counter()   # cache the ref prompt + warm the streaming decode path (outputs discarded)
-    kw = dict(language=c["language"], ref_audio=ref_audio, ref_text=ref_text,
-              xvec_only=tf["xvec_only"], append_silence=tf["append_silence"])
-    tts.generate_voice_clone(text="嗯。", **kw)
-    for _ in tts.generate_voice_clone_streaming(text="你好呀，我在呢。", chunk_size=tf["chunk_size"], **kw):
+    timings["tts_load_and_graph_capture_s"] = round(time.perf_counter() - started, 2)
+    started = time.perf_counter()   # cache the ref prompt + warm the streaming decode path (outputs discarded)
+    clone_kwargs = dict(language=tts_config["language"], ref_audio=ref_audio, ref_text=ref_text,
+                        xvec_only=fast_config["xvec_only"], append_silence=fast_config["append_silence"])
+    tts.generate_voice_clone(text="嗯。", **clone_kwargs)
+    for _ in tts.generate_voice_clone_streaming(text="你好呀，我在呢。", chunk_size=fast_config["chunk_size"], **clone_kwargs):
         pass
-    s["tts_warmup_s"] = round(time.perf_counter() - t, 2)
-    return tts, s
+    timings["tts_warmup_s"] = round(time.perf_counter() - started, 2)
+    return tts, timings
 
 
-def stream_segments(tts, tts_kw, text_q, rs, emit, stat, mark, raw24, sent16):
-    """Consume text segments from text_q until None; for every TTS chunk (float32 24 kHz, not 20 ms) resample to 16 kHz
-    and call emit(bytes of float32-LE). raw24 / sent16 collect the audio for the saved wavs."""
+def stream_segments(tts, generate_kwargs, text_queue, resampler, emit_audio, stats, mark_timestamp, raw_24k_chunks, sent_16k_chunks):
+    """Consume text segments from text_queue until None; for every TTS chunk (float32 24 kHz, not 20 ms) resample to 16 kHz
+    and call emit_audio(bytes of float32-LE). raw_24k_chunks / sent_16k_chunks collect the audio for the saved wavs."""
     while True:
-        seg = text_q.get()
-        if seg is None:
+        segment = text_queue.get()
+        if segment is None:
             break
-        if not Segmenter.speakable(seg):
+        if not Segmenter.speakable(segment):
             continue
-        stat["tts_segments"] += 1
-        for chunk, sr, _t in tts.generate_voice_clone_streaming(text=seg.strip(), **tts_kw):
-            x = np.asarray(chunk, dtype=np.float32).flatten()
-            raw24.append(x); stat["tts_chunks"] += 1
-            mark("tts_first_chunk")
-            y = rs.resample_chunk(x)
-            if len(y):
-                sent16.append(y); emit(y.astype("<f4").tobytes())
-    y = rs.resample_chunk(np.zeros(0, np.float32), last=True)
-    if len(y):
-        sent16.append(y); emit(y.astype("<f4").tobytes())
+        stats["tts_segments"] += 1
+        for chunk, sample_rate, _elapsed in tts.generate_voice_clone_streaming(text=segment.strip(), **generate_kwargs):
+            samples_24k = np.asarray(chunk, dtype=np.float32).flatten()
+            raw_24k_chunks.append(samples_24k); stats["tts_chunks"] += 1
+            mark_timestamp("tts_first_chunk")
+            samples_16k = resampler.resample_chunk(samples_24k)
+            if len(samples_16k):
+                sent_16k_chunks.append(samples_16k); emit_audio(samples_16k.astype("<f4").tobytes())
+    samples_16k = resampler.resample_chunk(np.zeros(0, np.float32), last=True)
+    if len(samples_16k):
+        sent_16k_chunks.append(samples_16k); emit_audio(samples_16k.astype("<f4").tobytes())
