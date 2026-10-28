@@ -1,6 +1,6 @@
-# 新前端 ↔ RTP 接收端 介面規格
+# 前端 ↔ RTP 接收端 介面規格
 
-新前端：`web/imood_ai.html`，網址 http://localhost:8010/imood/imood_ai.html。
+前端：`web/imood_ai.html`，網址 http://localhost:8010/imood/imood_ai.html。
 
 ## 架構
 
@@ -25,7 +25,7 @@
 | `control` | LiveTalking 的 `/sse`、`/record` | 空字串 = 本頁同源 |
 | `voice` | 語音服務 `/api/ask`、`/api/job/{id}` | `http://<本機>:8020` |
 
-**新接收端只需要實作 `media` 這一個介面。** 另外兩個照舊直接連 LiveTalking 和語音服務。
+**接收端只需要實作 `media` 這一個介面。** 另外兩個照舊直接連 LiveTalking 和語音服務。
 
 ## 接收端必須實作的介面
 
@@ -56,7 +56,7 @@ Request（`Content-Type: application/json`）：
 4. **斷線清理**：瀏覽器按「結束視訊」只會關掉 RTCPeerConnection，不會另外打 API。接收端要在 peer connection 變成 `closed`／`failed` 時，自行釋放對應的 LiveTalking session。
 5. **ICE**：前端預設不使用 STUN（本機或同網段直接連）。使用者在設定勾選 STUN 時，會用 `stun:stun.l.google.com:19302`。瀏覽器最多等 2 秒收集 ICE candidate，所以 answer 裡要帶上接收端的 candidate（non-trickle，跟 LiveTalking 一樣）。
 
-## 怎麼切換到新接收端
+## 怎麼切換接收端
 
 不用改程式，下面兩種方式擇一：
 - 網址加參數：`http://localhost:8010/imood/imood_ai.html?media=http://localhost:8030`
@@ -70,7 +70,7 @@ Request（`Content-Type: application/json`）：
 # CORS preflight
 curl -i -X OPTIONS http://localhost:8030/offer -H "Origin: http://localhost:8010" -H "Access-Control-Request-Method: POST"
 ```
-1. 用 `?media=http://localhost:8030` 開新前端，按「開始視訊」，畫面出現、右上角顯示「視訊中」。
+1. 用 `?media=http://localhost:8030` 開前端，按「開始視訊」，畫面出現、右上角顯示「視訊中」。
 2. ⚡ 診斷 → WebRTC 接收：影像 fps 大約 25。
 3. 送出 `assets/test.wav`：數字人用複製的聲音回答，而且對嘴。這一步確認 `sessionid` 正確。
 4. 結束視訊後，`curl http://localhost:8010/cyber_gf/stats` 的 `sessions` 不應留下這個 session。

@@ -2,17 +2,18 @@
 
 A fully local voice-to-avatar pipeline. A spoken question (WAV) is transcribed by **Faster-Whisper**, answered by **Qwen3-14B** (llama.cpp), and spoken back in a **cloned voice** (Qwen3-TTS via faster-qwen3-tts, streamed). A **LiveTalking / Wav2Lip** avatar lip-syncs the answer live in the browser over **WebRTC**.
 
-> **Speech source (current default): vendor real-time voice.** The local ASR + LLM + TTS pipeline described below is **switched off by default** (`LEGACY_VOICE=0` in `config/paths.env` / `config/paths.bat`); startup then only launches LiveTalking. The avatar speaks audio pushed by the vendor to `ws://localhost:8010/cyber_gf/voice` (needs `VENDOR_VOICE_TOKEN`), see [docs/vendor_voice_receiver.md](docs/vendor_voice_receiver.md) and [docs/emotion_interface.md](docs/emotion_interface.md). The record-a-question button of the imood page only works with `LEGACY_VOICE=1`; sending recordings to the vendor is out of this project's scope (the vendor takes over that part). Everything below describes the legacy pipeline and still works with `LEGACY_VOICE=1`.
+> **Speech source (current default): vendor real-time voice.** The local ASR + LLM + TTS pipeline described below is **switched off by default** (`LEGACY_VOICE=0` in `config/paths.env` / `config/paths.bat`); startup then only launches LiveTalking. The avatar speaks audio pushed by the vendor to `ws://localhost:8010/cyber_gf/voice` (needs `VENDOR_VOICE_TOKEN`), see [docs/vendor_voice_receiver.md](docs/vendor_voice_receiver.md) and [docs/emotion_interface.md](docs/emotion_interface.md). The record-a-question button of the imood page only works with `LEGACY_VOICE=1`; sending recordings to the vendor is out of this project's scope (the vendor takes over that part). Everything below describes the local pipeline, which works with `LEGACY_VOICE=1`.
 
-> **Two modes.** `scripts\windows\start.bat vendor` (default, accepted vendor setup) or `start.bat full` (our pipeline: microphone → VAD → ASR → LLM → TTS ∥ BERT emotion → framed TCP link → LiveTalking). Code lives in the `imood/` package with one config file, `imood/pipeline.yaml`. See [docs/modes.md](docs/modes.md).
+> **Two modes.** `scripts\windows\start.bat vendor` (default, vendor setup) or `start.bat full` (the full pipeline: microphone → VAD → ASR → LLM → TTS ∥ BERT emotion → framed TCP link → LiveTalking). Code lives in the `imood/` package with one config file, `imood/pipeline.yaml`. See [docs/modes.md](docs/modes.md).
 
-**Legacy pipeline status: working end-to-end demo.** Local ASR · local LLM · local cloned TTS · streaming audio · LiveTalking/Wav2Lip avatar · WebRTC browser demo. No cloud APIs are used at runtime.
+**Local pipeline.** Local ASR · local LLM · local cloned TTS · streaming audio · LiveTalking/Wav2Lip avatar · WebRTC browser demo. No cloud APIs are used at runtime.
 
 ---
 
-## Quick Start (reference machine, legacy pipeline: set `LEGACY_VOICE=1` first, e.g. in `config/paths.local.env` and `config/paths.local.bat`)
+## Quick Start
+This is the local pipeline: set `LEGACY_VOICE=1` first, e.g. in `config/paths.local.env` and `config/paths.local.bat`.
 
-**Prerequisites.** These already exist on the reference machine; on a new machine see [Installation](#installation--reproduction).
+**Prerequisites.** On a new machine see [Installation](#installation--reproduction).
 - Windows with WSL distro **Ubuntu-24.04**, using mirrored networking (`config/wslconfig.example`)
 - llama.cpp + `Qwen3-14B-Q4_K_M.gguf` (default `E:\llama.cpp\`)
 - In Ubuntu-24.04:
@@ -42,7 +43,6 @@ With `assets/test.wav`:
 - **ASR transcript:** 你今天过得怎么样?有没有什么有趣的事情?
 - **LLM reply** (varies every run, persona from `config/persona.txt`), e.g. 今天还不错呀，下午跟闺蜜逛街买了件新衣服，挺好看的。倒是你呢，今天有干什么有趣的事吗？
 - **Avatar:** speaks the reply in the voice cloned from `assets/ref.wav`, lip-synced, at 25 fps
-- **Time from request to avatar speech:** about **3 s**. Measured mean **3.15 s** over 5 runs on the reference machine (RTX 4090, WSL2). This is a current-machine measurement, not a universal benchmark.
 
 ---
 
@@ -84,7 +84,7 @@ Versions, hashes and sources: [docs/components.md](docs/components.md).
 ---
 
 ## Installation / reproduction
-Tested on the reference machine only. Each step reuses a script from this repo.
+Each step reuses a script from this repo.
 
 **1. Windows side**
 - Enable WSL, `wsl --install -d Ubuntu-24.04`, then copy `config/wslconfig.example` to `%USERPROFILE%\.wslconfig` and run `wsl --shutdown`.
@@ -110,7 +110,7 @@ Tested on the reference machine only. Each step reuses a script from this repo.
   - run `python scripts\windows\wan_idle.py`.
 - Build the LiveTalking avatar: start LiveTalking (`lt_test_start.sh` or `start_avatar_services.bat`), then run `lt_build_avatar.sh` to create `wav2lip256_myavatar` from `assets/avatar/idle.mp4`.
 
-**5. Run** the [Quick Start](#quick-start-reference-machine).
+**5. Run** the [Quick Start](#quick-start).
 
 ## Configuration
 | File | What it sets |
@@ -119,10 +119,10 @@ Tested on the reference machine only. Each step reuses a script from this repo.
 | `config/paths.bat` | Windows paths: `WSL_DISTRO`, `LLAMA_DIR`, `LLAMA_MODEL`, `LLAMA_ARGS` (`-c 8192 -fa on --temp 1.0 --top-p 0.95`, port 8090), `COMFY_DIR`. The project root and its WSL path are auto-detected. Override in `config/paths.local.bat`. |
 | `config/voice.json` | ASR model, device, compute type and language; LLM URL and sampling; TTS model, dtype, attention; reference voice files |
 | `config/streaming_service.json` | voice service port (8020), TTS `chunk_size` (8), `append_silence` (false), LLM→TTS mode (`full` or `sentence`), LiveTalking URL and avatar ID |
-| `config/batch_reply.json` | Step 12 MVP (fallback) settings |
+| `config/batch_reply.json` | batch-reply settings (non-streaming) |
 | `config/persona.txt` | LLM system prompt (persona) |
 | `assets/ref.wav`, `config/ref_text.txt` | voice-cloning reference and its exact transcript |
-| `config/components.json` | informational inventory of the reference machine's external components |
+| `config/components.json` | informational inventory of the external components |
 
 **Ports:**
 - 8090: llama-server (Windows)
@@ -139,42 +139,26 @@ Tested on the reference machine only. Each step reuses a script from this repo.
   - It turns the PCM stream into 20 ms frames in LiveTalking's audio queue: one `start` event, one `end` event, the same pattern as LiveTalking's own streaming TTS integration.
   - Frames are enqueued atomically per received block, after a 480 ms pre-roll, which prevents start-of-utterance silence.
   - It reports underruns, queue depth, fps, and actual playback start and end.
-- **Why upstream stays unmodified:** LiveTalking (latest `main`) has no continuous-audio endpoint. Adding routes at runtime keeps upgrades and the MVP path (`/humanaudio`) intact. Nothing in the LiveTalking checkout is edited (`git status` is clean).
-
-## Performance (reference machine only)
-RTX 4090 24 GB, WSL2 Ubuntu-24.04, `assets/test.wav` (3.84 s), 5 consecutive runs, default `full` mode. Seconds from request received:
-
-| Stage | Measured |
-|---|---|
-| ASR done (Faster-Whisper large-v3) | 0.86–1.36 s |
-| LLM first token / done (Qwen3-14B Q4_K_M) | 0.93–1.46 s / 1.39–1.85 s |
-| TTS first chunk (= first audio into LiveTalking) | 1.80–2.32 s |
-| **Avatar speaking start** | **2.95–3.35 s (mean 3.15 s)**; the Step 12 MVP (non-streaming) was 6.91 s |
-| TTS speed (fixed-text benchmark) | RTF 0.29 (3.4× real time); first chunk 0.31 s after TTS start |
-| LiveTalking | final 25.0 fps, inference 98–115 fps; 0 underruns / 0 overflows (5 of 5 runs, and 5 of 5 again after a cold start via the repo launchers: speaking start 2.87–3.70 s) |
-| VRAM (full stack) | about 23.3 GB of 24 GB (llama-server ~10.0 GB; voice service + LiveTalking ~9–11 GB; desktop ~1.5 GB) |
-
-Method and measurements: [docs/streaming_service.md](docs/streaming_service.md).
+- **Why upstream stays unmodified:** LiveTalking (latest `main`) has no continuous-audio endpoint. Adding routes at runtime keeps upgrades and the batch-reply path (`/humanaudio`) intact. Nothing in the LiveTalking checkout is edited (`git status` is clean).
 
 ## Known issues
-- **Remote-desktop viewing can stutter** even though recordings are smooth and in sync and the server renders a steady 25 fps. The imood page shows live WebRTC receive stats (fps, dropped frames, freezes, jitter) under 診斷資訊 for diagnosis.
-- **VRAM is tight:** the full stack uses about 23.3 of 24 GB. Stop other GPU-heavy services first. On the reference machine that means a CosyVoice TTS on :8001 and an older service on :8000, which start automatically after a reboot or login.
-- **Default WSL distro trap:** the reference machine's default distro is Ubuntu-22.04, where none of the paths exist. Always use `wsl -d Ubuntu-24.04`, which all launchers do.
+- **VRAM is tight:** the full stack uses about 23.3 of 24 GB (llama-server ~10 GB; voice service + LiveTalking ~9-11 GB; desktop ~1.5 GB). Stop other GPU-heavy services first; when VRAM is short, TTS runs slower than real time and the audio breaks up.
+- **Default WSL distro:** the machine's default distro may be a different one (e.g. Ubuntu-22.04), where none of the paths exist. Always use `wsl -d Ubuntu-24.04`, which all launchers do.
 - **First start:** the first run after installing downloads the HF models (about 7 GB) if they aren't cached.
-- Avatar speech starts about 1.1 s after the first audio frame reaches LiveTalking. This is LiveTalking's internal buffering, and it's now the largest latency term.
+- The imood page shows live WebRTC receive stats (fps, dropped frames, freezes, jitter) under 診斷資訊 for diagnosing playback problems.
 
 ## Project structure
 ```
 cyber_gf/
 ├── README.md                 this file
 ├── .gitignore
-├── config/                   paths (defaults + *.local.example templates), voice / Step 12 settings, persona, ref text, wslconfig template
+├── config/                   paths (defaults + *.local.example templates), voice / streaming settings, persona, ref text, wslconfig template
 ├── scripts/
-│   ├── windows/              start/stop launchers, llama/ComfyUI starters, MVP launcher, idle.mp4 generator, LLM test, benchmark and download tools
-│   └── wsl/                  voice service, LiveTalking adapter, start/stop, install scripts (LiveTalking, weights, avatar, voice envs), MVP and Step 9 tools
+│   ├── windows/              start/stop launchers, llama/ComfyUI starters, batch-reply launcher, idle.mp4 generator, LLM test, benchmark and download tools
+│   └── wsl/                  voice service, LiveTalking adapter, start/stop, install scripts (LiveTalking, weights, avatar, voice envs), batch-reply and benchmark tools
 │       └── perf/             benchmarks and the headless end-to-end test (outputs go to outputs/, gitignored)
 ├── web/                      imood_ai.html, avatars.json (served by the adapter at /imood/)
-├── assets/                   ref.wav (voice reference), test.wav (sample question), avatar/ (image + idle.mp4), test_frames/ (evidence images)
+├── assets/                   ref.wav (voice reference), test.wav (sample question), avatar/ (image + idle.mp4)
 └── docs/                     architecture, modes, streaming service, interfaces, components
 ```
 `outputs/` and `logs/` are created at runtime and are gitignored.
@@ -182,14 +166,11 @@ cyber_gf/
 ## Documentation
 | Doc | Content |
 |---|---|
-| [docs/architecture.md](docs/architecture.md) | Current architecture, asset preparation, fallbacks |
-| [docs/streaming_service.md](docs/streaming_service.md) | Streaming design, LiveTalking source analysis, adapter, measurements, start/stop, fallback |
-| [docs/components.md](docs/components.md) | External components, versions, sources |
+| [docs/architecture.md](docs/architecture.md) | Architecture, asset preparation, alternative flows |
+| [docs/streaming_service.md](docs/streaming_service.md) | Streaming transport, LiveTalking adapter, LLM to TTS modes, metrics, start/stop |
 | [docs/modes.md](docs/modes.md) | The two modes: start, structure, tests, settings |
-
-## Further development (not part of the working core)
-- Microphone input and VAD (end-of-speech detection)
-- Interruption / barge-in (LiveTalking already exposes `/interrupt_talk`)
-- UI polish for the imood page
-- More robust service management (health checks, auto-restart, a single supervisor)
-- Reducing LiveTalking's internal ~1.1 s buffering latency
+| [docs/setup.md](docs/setup.md) | Per-machine settings (vendor token, `LEGACY_VOICE`) and start-up |
+| [docs/vendor_voice_receiver.md](docs/vendor_voice_receiver.md) | Vendor real-time voice receiver |
+| [docs/emotion_interface.md](docs/emotion_interface.md) | Emotion notification format |
+| [docs/frontend_interface.md](docs/frontend_interface.md) | Frontend and media receiver interface |
+| [docs/components.md](docs/components.md) | External components, versions, sources |

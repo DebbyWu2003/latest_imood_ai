@@ -6,7 +6,7 @@
 <title>imood.ai 視訊聊天</title>
 <!--
   The project's browser frontend. Media (WebRTC) can come from LiveTalking itself or from a separate receiver that speaks the same
-  POST /offer contract - see docs/frontend_v2_interface.md. Endpoints are set in the ⚙ panel or by URL:
+  POST /offer contract - see docs/frontend_interface.md. Endpoints are set in the ⚙ panel or by URL:
     ?media=http://host:8030   WebRTC offer endpoint base   (default: same origin = LiveTalking :8010)
     ?control=http://host:8010 LiveTalking base for /sse, /record (default: same origin)
     ?voice=http://host:8020   voice service base           (default: this host :8020)
@@ -259,7 +259,7 @@ const log = m => { $('log').textContent = `${new Date().toLocaleTimeString()}  $
 const store = { get(k, d) { try { return localStorage.getItem(k) ?? d; } catch { return d; } },
                 set(k, v) { try { localStorage.setItem(k, v); } catch {} } };
 
-// ---- endpoints: URL query > saved settings > defaults (see header comment / docs/frontend_v2_interface.md)
+// ---- endpoints: URL query > saved settings > defaults (see header comment / docs/frontend_interface.md)
 const CFG_KEY = 'cyber_gf_chat_cfg';
 const cfg = (() => {
   let saved = {}; try { saved = JSON.parse(store.get(CFG_KEY, '{}')); } catch {}

@@ -1,6 +1,6 @@
 # Architecture
 
-Current demo: **Step 12 v2**. Full design notes, including LiveTalking source analysis and measurements, are in [streaming_service.md](streaming_service.md).
+Details of the streaming service are in [streaming_service.md](streaming_service.md); the two run modes are in [modes.md](modes.md).
 
 ## Runtime (per question)
 ```
@@ -41,6 +41,6 @@ reference voice: assets/ref.wav (6 s, 24 kHz mono) + config/ref_text.txt (its ex
   → Qwen3-TTS-12Hz-1.7B-Base ICL voice cloning (prompt built once at voice-service startup)
 ```
 
-## Fallbacks kept in the repo
-- **Step 12 MVP** (non-streaming): `scripts/windows/run_batch_reply.bat` synthesizes the full `reply.wav` and POSTs it to upstream `/humanaudio`.
-- **Original Qwen3-TTS backend** (`qwen-tts` 0.1.1, `.venv-voice`, RTF ≈ 3.1): `scripts/wsl/run_voice_pipeline_bench.sh`.
+## Alternative flows
+- **Batch reply** (non-streaming): `scripts/windows/run_batch_reply.bat` synthesizes the full `reply.wav` and POSTs it to upstream `/humanaudio`.
+- **Voice pipeline benchmark** (`qwen-tts` 0.1.1, `.venv-voice`): `scripts/wsl/run_voice_pipeline_bench.sh`.

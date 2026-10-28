@@ -81,7 +81,7 @@ TTS 與 BERT 同時拿到回覆文字。`full` 的 LLM→TTS 預設是等整段�
 ## 6. 已知限制
 
 - vendor 模式下 LiveTalking 內也會開 127.0.0.1:8100 的 framed 接收器（不影響廠商流程）；不要可設 `downstream.enabled: false`。
-- full 模式的全部元件共用一張 24 GB 顯卡，顯存吃緊時 TTS 會慢於即時而斷音（與傳輸方式無關，實測 http / framed 相同）。
+- full 模式的全部元件共用一張 24 GB 顯卡，顯存吃緊時 TTS 會慢於即時而斷音（與傳輸方式無關，http / framed 相同）。
 - 8 類 BERT 模型的標籤順序取自模型卡，無法從模型本身驗證。
 
 ## 7. 前端（`web/imood_ai.html`）
