@@ -3,14 +3,15 @@ import io
 import time
 
 
-def load(a):
+def load(asr_config):
     from faster_whisper import WhisperModel
-    t = time.perf_counter()
-    model = WhisperModel(a["model"], device=a["device"], compute_type=a["compute_type"])
-    return model, round(time.perf_counter() - t, 2)
+    started = time.perf_counter()
+    model = WhisperModel(asr_config["model"], device=asr_config["device"], compute_type=asr_config["compute_type"])
+    return model, round(time.perf_counter() - started, 2)
 
 
-def transcribe(model, wav_bytes, a):
+def transcribe(model, wav_bytes, asr_config):
     """-> (text, input_audio_seconds)"""
-    segs, info = model.transcribe(io.BytesIO(wav_bytes), language=a["language"], beam_size=a["beam_size"], vad_filter=a["vad_filter"])
-    return "".join(s.text for s in segs).strip(), info.duration
+    segments, info = model.transcribe(io.BytesIO(wav_bytes), language=asr_config["language"], beam_size=asr_config["beam_size"],
+                                      vad_filter=asr_config["vad_filter"])
+    return "".join(segment.text for segment in segments).strip(), info.duration

@@ -60,9 +60,9 @@ def test_ws():
     from fastapi.testclient import TestClient
     from imood.intake import mic_ws
     jobs = []
-    mic_ws._ENV.update(submit=lambda text, wav, sid: jobs.append((text, len(wav), sid)) or f"job{len(jobs)}",
-                       asr_model=None, asr_cfg=None)
-    mic_ws._asr = lambda pcm: "這是測試句子"
+    mic_ws._SERVICE_STATE.update(submit=lambda text, wav, sid: jobs.append((text, len(wav), sid)) or f"job{len(jobs)}",
+                       asr_model=None, asr_config=None)
+    mic_ws._recognize = lambda pcm: "這是測試句子"
     pcm = speech_pcm()
     with TestClient(mic_ws.app).websocket_connect("/ws/audio?session=abc") as ws:
         sent = 0

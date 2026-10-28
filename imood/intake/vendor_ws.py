@@ -26,10 +26,10 @@ EMOTIONS = {"neutral", "happy", "sad", "angry", "fear"}
 DEFAULT_ORIGINS = {"https://websocket-audio-tester.cielsi.workers.dev"}
 
 
-class _Utt:
-    def __init__(self, utt_id, emotion, sess):
-        self.id, self.emotion, self.sess = utt_id, emotion, sess
-        self.buf = b""
+class _Utterance:
+    def __init__(self, utterance_id, emotion, session):
+        self.id, self.emotion, self.session = utterance_id, emotion, session
+        self.pending_audio = b""
         self.started = False       # 'start' frame already enqueued
         self.frames = 0
         self.chunks = 0
@@ -48,56 +48,56 @@ class VendorReceiver:
             log.warning("VENDOR_VOICE_TOKEN is not set: every connection will be rejected with 4001")
 
     # ---- helpers -----------------------------------------------------------------------------
-    async def _send(self, ws, obj):
+    async def _send(self, ws, message):
         if not ws.closed:
             try:
-                await ws.send_json(obj)
+                await ws.send_json(message)
             except ConnectionError:
                 pass
 
-    def _enqueue(self, sess, frames, first_meta=None, end_meta=None):
+    def _enqueue(self, session, frames, first_meta=None, end_meta=None):
         """Put a block of float32 frames on the ASR queue atomically (same reasoning as put_batch in
         livetalking_cyber_gf.py): all frames become visible at once so MelASR's 10 ms get() cannot starve."""
         items = []
-        for i, f in enumerate(frames):
-            items.append(self.make_item(f, dict(first_meta) if (i == 0 and first_meta) else {}))
+        for index, frame in enumerate(frames):
+            items.append(self.make_item(frame, dict(first_meta) if (index == 0 and first_meta) else {}))
         if end_meta is not None:
             items.append(self.make_item(np.zeros(FRAME, np.float32), dict(end_meta)))
-        q = sess.asr.queue
-        with q.mutex:
-            for it in items:
-                q._put(it); q.unfinished_tasks += 1
-            q.not_empty.notify_all()
+        asr_queue = session.asr.queue
+        with asr_queue.mutex:
+            for item in items:
+                asr_queue._put(item); asr_queue.unfinished_tasks += 1
+            asr_queue.not_empty.notify_all()
 
     @staticmethod
-    def _to_frames(raw):
-        pcm = np.frombuffer(raw, dtype="<i2").astype(np.float32) / 32768.0
-        return [pcm[i * FRAME:(i + 1) * FRAME].copy() for i in range(len(pcm) // FRAME)]
+    def _to_frames(pcm_bytes):
+        samples = np.frombuffer(pcm_bytes, dtype="<i2").astype(np.float32) / 32768.0
+        return [samples[i * FRAME:(i + 1) * FRAME].copy() for i in range(len(samples) // FRAME)]
 
-    def _meta(self, utt, status):
-        return {"status": status, "vendor_utt": utt.id, "emotion": utt.emotion}
+    def _meta(self, utterance, status):
+        return {"status": status, "vendor_utt": utterance.id, "emotion": utterance.emotion}
 
-    def _flush(self, utt, final=False):
+    def _flush(self, utterance, final=False):
         """Release buffered audio: first after PREROLL_FRAMES, then in BLOCK_FRAMES blocks; everything on final."""
-        n = len(utt.buf) // FRAME_BYTES
-        if not final and n < (BLOCK_FRAMES if utt.started else PREROLL_FRAMES):
+        frame_count = len(utterance.pending_audio) // FRAME_BYTES
+        if not final and frame_count < (BLOCK_FRAMES if utterance.started else PREROLL_FRAMES):
             return
-        frames = self._to_frames(utt.buf[:n * FRAME_BYTES])
-        rest = utt.buf[n * FRAME_BYTES:]
-        utt.buf = b""
-        if final and len(rest) >= 2:                           # zero-pad the last partial frame
-            pad = np.zeros(FRAME, np.float32)
-            t = np.frombuffer(rest[:len(rest) // 2 * 2], dtype="<i2").astype(np.float32) / 32768.0
-            pad[:len(t)] = t
-            frames.append(pad)
+        frames = self._to_frames(utterance.pending_audio[:frame_count * FRAME_BYTES])
+        leftover = utterance.pending_audio[frame_count * FRAME_BYTES:]
+        utterance.pending_audio = b""
+        if final and len(leftover) >= 2:                           # zero-pad the last partial frame
+            padded_frame = np.zeros(FRAME, np.float32)
+            tail_samples = np.frombuffer(leftover[:len(leftover) // 2 * 2], dtype="<i2").astype(np.float32) / 32768.0
+            padded_frame[:len(tail_samples)] = tail_samples
+            frames.append(padded_frame)
         elif not final:
-            utt.buf = rest
+            utterance.pending_audio = leftover
         if not frames:
             return
-        first = None if utt.started else self._meta(utt, "start")
-        utt.started = True
-        self._enqueue(utt.sess, frames, first_meta=first, end_meta=self._meta(utt, "end") if final else None)
-        utt.frames += len(frames)
+        first_meta = None if utterance.started else self._meta(utterance, "start")
+        utterance.started = True
+        self._enqueue(utterance.session, frames, first_meta=first_meta, end_meta=self._meta(utterance, "end") if final else None)
+        utterance.frames += len(frames)
 
     # ---- main handler ------------------------------------------------------------------------
     async def handle(self, request):
@@ -112,90 +112,90 @@ class VendorReceiver:
             await ws.close(code=4001, message=b"auth failed")
             return ws
 
-        old = self.current                     # only after auth, so a failed attempt never kicks the live sender
+        previous_sender = self.current         # only after auth, so a failed attempt never kicks the live sender
         self.current = ws
-        if old is not None and not old.closed:
-            await old.close(code=4002, message=b"replaced by a new sender")
+        if previous_sender is not None and not previous_sender.closed:
+            await previous_sender.close(code=4002, message=b"replaced by a new sender")
         log.info("sender connected (origin=%s)", origin)
 
-        utt = None
+        utterance = None
         ignored = False                         # current utterance is being ignored (bad format / no session)
         listener = None
-        pump = None
+        pump_task = None
 
         def detach():
-            nonlocal listener, pump
-            if pump is not None:
-                pump.cancel()
+            nonlocal listener, pump_task
+            if pump_task is not None:
+                pump_task.cancel()
             if listener is not None and listener[1] in listener[0].msgqueues:
                 listener[0].msgqueues.remove(listener[1])
-            listener = pump = None
+            listener = pump_task = None
 
         def abort_current():
-            nonlocal utt
-            if utt is not None:
-                self._flush(utt, final=True)
-                utt = None
+            nonlocal utterance
+            if utterance is not None:
+                self._flush(utterance, final=True)
+                utterance = None
 
         try:
-            async for msg in ws:
-                if msg.type == WSMsgType.BINARY:
-                    if utt is None or ignored:
+            async for ws_message in ws:
+                if ws_message.type == WSMsgType.BINARY:
+                    if utterance is None or ignored:
                         continue
-                    utt.chunks += 1
-                    utt.buf += msg.data
-                    self._flush(utt)
-                elif msg.type == WSMsgType.TEXT:
+                    utterance.chunks += 1
+                    utterance.pending_audio += ws_message.data
+                    self._flush(utterance)
+                elif ws_message.type == WSMsgType.TEXT:
                     try:
-                        data = json.loads(msg.data)
-                        kind = data.get("type")
+                        payload = json.loads(ws_message.data)
+                        message_type = payload.get("type")
                     except Exception:
                         await self._send(ws, {"type": "error", "code": "bad_message", "message": "unparsable text message"})
                         continue
-                    if kind == "utterance.start":
-                        if data.get("version", 1) != 1:
+                    if message_type == "utterance.start":
+                        if payload.get("version", 1) != 1:
                             await ws.close(code=4003, message=b"unsupported version")
                             break
                         abort_current()
                         ignored = True
                         try:
-                            uid = str(uuid.UUID(str(data.get("utterance_id"))))
+                            utterance_id = str(uuid.UUID(str(payload.get("utterance_id"))))
                         except ValueError:
                             await self._send(ws, {"type": "error", "code": "invalid_utterance_id", "message": "utterance_id is not a UUID"})
                             continue
-                        if (data.get("format"), data.get("sample_rate"), data.get("channels")) != ("pcm_s16le", 16000, 1):
-                            await self._send(ws, {"type": "error", "code": "unsupported_format", "utterance_id": uid,
+                        if (payload.get("format"), payload.get("sample_rate"), payload.get("channels")) != ("pcm_s16le", 16000, 1):
+                            await self._send(ws, {"type": "error", "code": "unsupported_format", "utterance_id": utterance_id,
                                                   "message": "need pcm_s16le / 16000 Hz / 1 channel"})
                             continue
-                        sess = self.get_session()
-                        if sess is None:
-                            await self._send(ws, {"type": "error", "code": "no_session", "utterance_id": uid,
+                        session = self.get_session()
+                        if session is None:
+                            await self._send(ws, {"type": "error", "code": "no_session", "utterance_id": utterance_id,
                                                   "message": "no LiveTalking session (open the video page first)"})
                             continue
-                        emotion = data.get("emotion") or "neutral"
+                        emotion = payload.get("emotion") or "neutral"
                         if emotion not in EMOTIONS:
                             log.warning("unknown emotion %r -> neutral", emotion)
                             emotion = "neutral"
-                        if listener is not None and listener[0] is not sess:   # session changed: re-attach
+                        if listener is not None and listener[0] is not session:   # session changed: re-attach
                             detach()
                         if listener is None:
-                            q = queue.Queue(); sess.add_msgqueue(q); listener = (sess, q)
-                            pump = asyncio.ensure_future(self._pump(ws, sess, q))
-                        utt = _Utt(uid, emotion, sess)
-                        if not getattr(sess, "speaking", False):     # idle: change the face now so it is ready (and faded) when the voice starts
-                            self._emotion(sess, emotion, speaking=True)
+                            message_queue = queue.Queue(); session.add_msgqueue(message_queue); listener = (session, message_queue)
+                            pump_task = asyncio.ensure_future(self._pump(ws, session, message_queue))
+                        utterance = _Utterance(utterance_id, emotion, session)
+                        if not getattr(session, "speaking", False):     # idle: change the face now so it is ready (and faded) when the voice starts
+                            self._emotion(session, emotion, speaking=True)
                         ignored = False
-                    elif kind == "utterance.end":
-                        if utt is None or data.get("utterance_id") != utt.id:
+                    elif message_type == "utterance.end":
+                        if utterance is None or payload.get("utterance_id") != utterance.id:
                             continue
-                        if data.get("aborted"):
-                            log.info("utt %s aborted by sender (%d frames played so far)", utt.id, utt.frames)
-                        self._flush(utt, final=True)
-                        if not utt.started:      # empty utterance: nothing will play, so close the loop ourselves
-                            await self._send(ws, {"type": "playback.started", "utterance_id": utt.id})
-                            await self._send(ws, {"type": "playback.ended", "utterance_id": utt.id})
-                        utt = None
-                elif msg.type == WSMsgType.ERROR:
+                        if payload.get("aborted"):
+                            log.info("utt %s aborted by sender (%d frames played so far)", utterance.id, utterance.frames)
+                        self._flush(utterance, final=True)
+                        if not utterance.started:      # empty utterance: nothing will play, so close the loop ourselves
+                            await self._send(ws, {"type": "playback.started", "utterance_id": utterance.id})
+                            await self._send(ws, {"type": "playback.ended", "utterance_id": utterance.id})
+                        utterance = None
+                elif ws_message.type == WSMsgType.ERROR:
                     break
         finally:
             abort_current()                      # disconnect mid-utterance: close it so the mouth does not hang open
@@ -205,37 +205,37 @@ class VendorReceiver:
             log.info("sender disconnected exc=%r code=%s", ws.exception(), ws.close_code)
         return ws
 
-    def _emotion(self, sess, emotion, speaking=False):
+    def _emotion(self, session, emotion, speaking=False):
         if self.on_emotion:
             try:
-                self.on_emotion(sess, emotion, speaking)
+                self.on_emotion(session, emotion, speaking)
             except Exception:
                 log.exception("on_emotion(%r) failed", emotion)
 
-    async def _pump(self, ws, sess, q):
+    async def _pump(self, ws, session, message_queue):
         """LiveTalking announces start/end when it ACTUALLY plays our frames -> playback.* to the sender,
         and the emotion to /sse listeners at the same moment."""
-        last_emo = {}
+        last_emotion = {}
         try:
             while not ws.closed:
                 try:
-                    m = json.loads(q.get_nowait())
+                    event = json.loads(message_queue.get_nowait())
                 except queue.Empty:
                     await asyncio.sleep(0.02)
                     continue
                 except Exception:
                     continue
-                uid = m.get("vendor_utt")
-                if not uid:
+                utterance_id = event.get("vendor_utt")
+                if not utterance_id:
                     continue
-                if m.get("status") == "start":
-                    last_emo[uid] = m.get("emotion", "neutral")
-                    self._emotion(sess, last_emo[uid], speaking=True)
-                    sess.send_msg(json.dumps({"type": "emotion", "utterance_id": uid, "emotion": m.get("emotion", "neutral")}))
-                    await self._send(ws, {"type": "playback.started", "utterance_id": uid})
-                elif m.get("status") == "end":
+                if event.get("status") == "start":
+                    last_emotion[utterance_id] = event.get("emotion", "neutral")
+                    self._emotion(session, last_emotion[utterance_id], speaking=True)
+                    session.send_msg(json.dumps({"type": "emotion", "utterance_id": utterance_id, "emotion": event.get("emotion", "neutral")}))
+                    await self._send(ws, {"type": "playback.started", "utterance_id": utterance_id})
+                elif event.get("status") == "end":
                     # hold the utterance's emotion on its idle face after speech (user decision; docs/emotion_interface.md suggested calm)
-                    self._emotion(sess, last_emo.pop(uid, "neutral"))
-                    await self._send(ws, {"type": "playback.ended", "utterance_id": uid})
+                    self._emotion(session, last_emotion.pop(utterance_id, "neutral"))
+                    await self._send(ws, {"type": "playback.ended", "utterance_id": utterance_id})
         except asyncio.CancelledError:
             pass
