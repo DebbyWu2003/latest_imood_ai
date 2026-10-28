@@ -50,7 +50,7 @@ Runtime-only hooks inside the adapter (instance-level, no file edits):
 5. A logging handler captures LiveTalking's `actual avg infer/final fps` lines.
 
 ## LLM → TTS (Phase D): full reply by default
-Both modes are implemented (`config/step12_v2.json → llm_to_tts.mode`, overridable per request with `?mode=sentence|full`). The sentence segmenter:
+Both modes are implemented (`config/streaming_service.json → llm_to_tts.mode`, overridable per request with `?mode=sentence|full`). The sentence segmenter:
 - emits on `。！？!?；;…`;
 - merges segments shorter than 8 speakable characters;
 - falls back to cutting at the last comma once 60 characters accumulate;

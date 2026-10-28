@@ -488,7 +488,7 @@ def test_config_and_contract_files(tmp=None):
     assert {"model", "device", "compute_type", "language", "beam_size", "vad_filter"} == set(voice["asr"])
     assert {"url", "persona_file", "temperature", "top_p", "max_tokens"} == set(voice["llm"])
     assert {"model", "device", "dtype", "attn_implementation", "language", "ref_audio", "ref_text_file"} == set(voice["tts"])
-    v2 = json.loads((ROOT / "config/step12_v2.json").read_text(encoding="utf-8"))
+    v2 = json.loads((ROOT / "config/streaming_service.json").read_text(encoding="utf-8"))
     assert {"wsl_distro", "service", "tts_fast", "resample", "llm_to_tts", "livetalking", "output_dir"} <= set(v2)
     assert v2["service"] == {"host": "0.0.0.0", "port": 8020} and v2["llm_to_tts"]["mode"] == "full"
     assert {"max_seq_len", "xvec_only", "append_silence", "chunk_size"} == set(v2["tts_fast"])

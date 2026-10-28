@@ -75,7 +75,7 @@ def main():
     args = ap.parse_args()
 
     cfg = load_cfg()                                                   # voice.json + persona + ref_text
-    s12 = json.loads((ROOT / "config/step12.json").read_text(encoding="utf-8"))
+    s12 = json.loads((ROOT / "config/batch_reply.json").read_text(encoding="utf-8"))
     if os.environ.get("WSL_DISTRO_NAME") != s12["wsl_distro"]:
         sys.exit(f"Must run in WSL {s12['wsl_distro']} (current: {os.environ.get('WSL_DISTRO_NAME')!r})")
     lt, tf, a, c = s12["livetalking"], s12["tts_fast"], cfg["asr"], cfg["tts"]

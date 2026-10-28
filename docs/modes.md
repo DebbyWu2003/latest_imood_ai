@@ -50,7 +50,7 @@ tests/               各模組測試
 ← STATUS：received → playback_started → playback_ended（或 error）
 ```
 
-TTS 與 BERT 同時拿到回覆文字。`full` 的 LLM→TTS 預設是等整段寫完再念（`config/step12_v2.json` 的 `llm_to_tts.mode`）；
+TTS 與 BERT 同時拿到回覆文字。`full` 的 LLM→TTS 預設是等整段寫完再念（`config/streaming_service.json` 的 `llm_to_tts.mode`）；
 要邊寫邊念改成 `sentence`。慢的時候先看 GPU 顯存（見 README 的 VRAM 說明）。
 
 ## 4. 測試

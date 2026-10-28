@@ -118,8 +118,8 @@ Tested on the reference machine only. Each step reuses a script from this repo.
 | `config/paths.env` | WSL paths: `WSL_DISTRO`, `LT_DIR`, `LT_VENV`, `LT_AVATAR_ID`, `LT_STUN`, `TTS_FAST_VENV`, `HF_HOME`, logs. The project root is auto-detected. Override in `config/paths.local.env`. |
 | `config/paths.bat` | Windows paths: `WSL_DISTRO`, `LLAMA_DIR`, `LLAMA_MODEL`, `LLAMA_ARGS` (`-c 8192 -fa on --temp 1.0 --top-p 0.95`, port 8090), `COMFY_DIR`. The project root and its WSL path are auto-detected. Override in `config/paths.local.bat`. |
 | `config/voice.json` | ASR model, device, compute type and language; LLM URL and sampling; TTS model, dtype, attention; reference voice files |
-| `config/step12_v2.json` | voice service port (8020), TTS `chunk_size` (8), `append_silence` (false), LLM→TTS mode (`full` or `sentence`), LiveTalking URL and avatar ID |
-| `config/step12.json` | Step 12 MVP (fallback) settings |
+| `config/streaming_service.json` | voice service port (8020), TTS `chunk_size` (8), `append_silence` (false), LLM→TTS mode (`full` or `sentence`), LiveTalking URL and avatar ID |
+| `config/batch_reply.json` | Step 12 MVP (fallback) settings |
 | `config/persona.txt` | LLM system prompt (persona) |
 | `assets/ref.wav`, `config/ref_text.txt` | voice-cloning reference and its exact transcript |
 | `config/components.json` | informational inventory of the reference machine's external components |

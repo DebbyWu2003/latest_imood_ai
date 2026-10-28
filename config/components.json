@@ -112,13 +112,13 @@
     "config": "config/voice.json",
     "run": "scripts/wsl/run_voice_test.sh"
   },
-  "step12_v2": {
+  "streaming_service": {
     "doc": "docs/step12_v2.md",
     "voice_service": {
       "script": "scripts/wsl/voice_service.py",
       "venv": "/root/cyber_gf/.venv-tts-fast",
       "port": 8020,
-      "config": "config/step12_v2.json"
+      "config": "config/streaming_service.json"
     },
     "livetalking_adapter": {
       "script": "scripts/wsl/livetalking_cyber_gf.py",
