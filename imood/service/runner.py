@@ -171,72 +171,82 @@ class _AudioPipeline:
             self.job.error = f"send: {e}"; self.job.log.append(traceback.format_exc())
 
 
-def run_job(job):
-    import numpy as np, soundfile as sf
-    a, c, tf = VOICE_CONFIG["asr"], VOICE_CONFIG["tts"], SERVICE_CONFIG["tts_fast"]
-    out = _prepare_output_dir(job)
-    base = LIVETALKING_CONFIG["url"]
-    _resolve_session(job, base)
-    _transcribe(job, a)
-
-    pipeline = _AudioPipeline(job, base, c, tf)
-    pipeline.start()
-
-    # ---- LLM (streamed) -> segments
+def _stream_reply(job, pipeline):
+    """LLM (streamed) -> segments -> TTS. Sentence mode hands every finished sentence over at once, full mode the whole reply."""
     job.state = "thinking"
-    seg = Segmenter(SERVICE_CONFIG["llm_to_tts"])
+    segmenter = Segmenter(SERVICE_CONFIG["llm_to_tts"])
     sentence_mode = job.mode == "sentence"
-    for d in llm_deltas(VOICE_CONFIG, job.transcript):
+    for delta in llm_deltas(VOICE_CONFIG, job.transcript):
         job.mark("llm_first_token")
-        job.reply += d
+        job.reply += delta
         if sentence_mode:
-            for s in seg.feed(d):
-                job.segments.append(s); job.mark("first_segment_ready"); pipeline.submit_segment(s); job.state = "synthesizing"
+            for segment in segmenter.feed(delta):
+                job.segments.append(segment); job.mark("first_segment_ready"); pipeline.submit_segment(segment); job.state = "synthesizing"
     job.mark("llm_done")
-    rest = seg.flush() if sentence_mode else [job.reply]
-    for s in rest:
-        if s:
-            job.segments.append(s); job.mark("first_segment_ready"); pipeline.submit_segment(s)
+    remaining = segmenter.flush() if sentence_mode else [job.reply]
+    for segment in remaining:
+        if segment:
+            job.segments.append(segment); job.mark("first_segment_ready"); pipeline.submit_segment(segment)
     pipeline.text_queue.put(None)
     job.state = "synthesizing"
     assert "".join(job.segments) == job.reply, "segmentation must preserve the exact reply text"
 
-    # ---- wait for playback start / end (reported by the LiveTalking adapter)
+
+def _await_playback(job, pipeline, base):
+    """Wait for playback start / end (reported by the LiveTalking adapter), then join the worker threads."""
     deadline = time.time() + 120
     while time.time() < deadline:
         try:
-            u = lt_get(base, f"/cyber_gf/utt/{pipeline.utterance_id}")
+            response = lt_get(base, f"/cyber_gf/utt/{pipeline.utterance_id}")
         except Exception:
-            u = {}
-        d = u.get("data") or {}
-        if d.get("first_frame_put"):
-            job.mark("first_frame_put_livetalking", d["first_frame_put"])
-        if d.get("playback_start"):
-            job.mark("avatar_speaking_start", d["playback_start"]); job.state = "speaking"
-        if d.get("playback_end"):
-            job.mark("avatar_speaking_end", d["playback_end"]); job.metrics["livetalking"] = d; break
+            response = {}
+        stats = response.get("data") or {}
+        if stats.get("first_frame_put"):
+            job.mark("first_frame_put_livetalking", stats["first_frame_put"])
+        if stats.get("playback_start"):
+            job.mark("avatar_speaking_start", stats["playback_start"]); job.state = "speaking"
+        if stats.get("playback_end"):
+            job.mark("avatar_speaking_end", stats["playback_end"]); job.metrics["livetalking"] = stats; break
         if job.error and not pipeline.producer_thread.is_alive() and not pipeline.sender_thread.is_alive():
             break
         time.sleep(0.05)
     pipeline.producer_thread.join(5); pipeline.sender_thread.join(5)
 
-    audio16 = np.concatenate(pipeline.sent_16k_chunks) if pipeline.sent_16k_chunks else np.zeros(0, np.float32)
-    audio24 = np.concatenate(pipeline.raw_24k_chunks) if pipeline.raw_24k_chunks else np.zeros(0, np.float32)
-    sf.write(str(out / "reply_24k_tts.wav"), audio24, 24000)
-    sf.write(str(out / "reply_16k_sent.wav"), audio16, 16000)
-    lt_d = job.metrics.get("livetalking") or pipeline.sender_result.get("data") or {}
+
+def _save_results(job, pipeline, output_dir):
+    """Write the audio and text results, fill in the metrics and set the final job state."""
+    import numpy as np, soundfile as sf
+    audio_16k = np.concatenate(pipeline.sent_16k_chunks) if pipeline.sent_16k_chunks else np.zeros(0, np.float32)
+    audio_24k = np.concatenate(pipeline.raw_24k_chunks) if pipeline.raw_24k_chunks else np.zeros(0, np.float32)
+    sf.write(str(output_dir / "reply_24k_tts.wav"), audio_24k, 24000)
+    sf.write(str(output_dir / "reply_16k_sent.wav"), audio_16k, 16000)
+    livetalking_stats = job.metrics.get("livetalking") or pipeline.sender_result.get("data") or {}
     job.metrics.update({
         "tts_chunks": pipeline.stats["tts_chunks"], "tts_segments": pipeline.stats["tts_segments"], "service_audio_queue_max": pipeline.stats["audio_q_max"],
-        "audio_s_tts_24k": round(len(audio24) / 24000, 3), "audio_s_sent_16k": round(len(audio16) / 16000, 3),
-        "lt_frames": lt_d.get("frames"), "lt_max_queue_frames": lt_d.get("max_queue_frames"),
-        "lt_underruns": lt_d.get("underruns"), "lt_underrun_frames": lt_d.get("underrun_frames"),
-        "lt_overflows": lt_d.get("overflows"), "lt_fps": lt_d.get("lt_fps"),
-        "tts_rtf": round((job.timestamps.get("tts_done", 0) - job.timestamps.get("first_segment_ready", 0)) / max(len(audio24) / 24000, 1e-6), 3),
+        "audio_s_tts_24k": round(len(audio_24k) / 24000, 3), "audio_s_sent_16k": round(len(audio_16k) / 16000, 3),
+        "lt_frames": livetalking_stats.get("frames"), "lt_max_queue_frames": livetalking_stats.get("max_queue_frames"),
+        "lt_underruns": livetalking_stats.get("underruns"), "lt_underrun_frames": livetalking_stats.get("underrun_frames"),
+        "lt_overflows": livetalking_stats.get("overflows"), "lt_fps": livetalking_stats.get("lt_fps"),
+        "tts_rtf": round((job.timestamps.get("tts_done", 0) - job.timestamps.get("first_segment_ready", 0)) / max(len(audio_24k) / 24000, 1e-6), 3),
     })
     if "avatar_speaking_start" in job.timestamps and "avatar_speaking_end" in job.timestamps:
         job.metrics["avatar_spoke_s"] = round(job.timestamps["avatar_speaking_end"] - job.timestamps["avatar_speaking_start"], 3)
-    (out / "transcript.txt").write_text(job.transcript + "\n", encoding="utf-8")
-    (out / "reply.txt").write_text(job.reply + "\n", encoding="utf-8")
+    (output_dir / "transcript.txt").write_text(job.transcript + "\n", encoding="utf-8")
+    (output_dir / "reply.txt").write_text(job.reply + "\n", encoding="utf-8")
     job.state = "error" if job.error else "done"
-    (out / "timings.json").write_text(json.dumps(job.info(), ensure_ascii=False, indent=2), encoding="utf-8")
-    job.metrics["output_dir"] = str(out.relative_to(ROOT))
+    (output_dir / "timings.json").write_text(json.dumps(job.info(), ensure_ascii=False, indent=2), encoding="utf-8")
+    job.metrics["output_dir"] = str(output_dir.relative_to(ROOT))
+
+
+def run_job(job):
+    asr_config, tts_config, tts_fast_config = VOICE_CONFIG["asr"], VOICE_CONFIG["tts"], SERVICE_CONFIG["tts_fast"]
+    output_dir = _prepare_output_dir(job)
+    base = LIVETALKING_CONFIG["url"]
+    _resolve_session(job, base)
+    _transcribe(job, asr_config)
+
+    pipeline = _AudioPipeline(job, base, tts_config, tts_fast_config)
+    pipeline.start()
+    _stream_reply(job, pipeline)
+    _await_playback(job, pipeline, base)
+    _save_results(job, pipeline, output_dir)
