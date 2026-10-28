@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build the LiveTalking avatar (default wav2lip256_myavatar) from assets/avatar/idle.mp4 via LiveTalking's own
 # avatar API (the same request its avatar.html form sends, with the form defaults).
-# Needs LiveTalking running (lt_test_start.sh or start_step12_v2.sh). Usage: lt_build_avatar.sh [video] [avatar_id]
+# Needs LiveTalking running (lt_test_start.sh or start_avatar_services.sh). Usage: lt_build_avatar.sh [video] [avatar_id]
 set -e
 source "$(dirname "$0")/../../config/paths.env"
 VIDEO="${1:-$PROJECT_WSL/assets/avatar/idle.mp4}"; AVATAR="${2:-$LT_AVATAR_ID}"

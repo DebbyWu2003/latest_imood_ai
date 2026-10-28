@@ -23,7 +23,7 @@ A fully local voice-to-avatar pipeline. A spoken question (WAV) is transcribed b
 **Run the demo**
 1. Start everything:
    ```bat
-   scripts\windows\start_step12_v2.bat
+   scripts\windows\start_avatar_services.bat
    ```
    It starts llama-server in its own window (if it isn't already running), starts the LiveTalking adapter and the voice service in Ubuntu-24.04, and opens the imood page.
 2. Wait until the console prints `LiveTalking+adapter: OK` and `voice service: OK`. **The first start loads all models and takes roughly 20–30 s.** Models then stay resident, so later questions don't reload anything.
@@ -34,7 +34,7 @@ A fully local voice-to-avatar pipeline. A spoken question (WAV) is transcribed b
 7. The chat shows the state (asr → thinking → synthesizing → speaking → done), the transcript and the LLM reply; latency metrics are under 診斷資訊 → 延遲. The avatar speaks the reply in the cloned voice.
 8. Stop everything (both WSL services and llama-server):
    ```bat
-   scripts\windows\stop_step12_v2.bat
+   scripts\windows\stop_avatar_services.bat
    ```
 
 ## Expected demo result
@@ -108,7 +108,7 @@ Tested on the reference machine only. Each step reuses a script from this repo.
   - run `scripts\windows\start_comfyui.bat`;
   - copy the avatar image as PNG to ComfyUI's `input\xiaoya_avatar.png`;
   - run `python scripts\windows\wan_idle.py`.
-- Build the LiveTalking avatar: start LiveTalking (`lt_test_start.sh` or `start_step12_v2.bat`), then run `lt_build_avatar.sh` to create `wav2lip256_myavatar` from `assets/avatar/idle.mp4`.
+- Build the LiveTalking avatar: start LiveTalking (`lt_test_start.sh` or `start_avatar_services.bat`), then run `lt_build_avatar.sh` to create `wav2lip256_myavatar` from `assets/avatar/idle.mp4`.
 
 **5. Run** the [Quick Start](#quick-start-reference-machine).
 

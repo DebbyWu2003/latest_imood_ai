@@ -50,7 +50,7 @@
 
 ### 啟動
 
-執行 `scripts\windows\start_step12_v2.bat`。預設只開數字人，並打開 http://localhost:8010/imood/imood_ai.html。
+執行 `scripts\windows\start_avatar_services.bat`。預設只開數字人，並打開 http://localhost:8010/imood/imood_ai.html。
 
 ### 用廠商發送端測試
 

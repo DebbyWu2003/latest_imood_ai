@@ -15,5 +15,5 @@ echo WARNING: llama-server not ready after ~2 min - check the llama-server windo
 :llama_ready
 echo llama-server: OK
 :start_services
-wsl -d %WSL_DISTRO% -- bash "%PROJECT_WSL%/scripts/wsl/start_step12_v2.sh"
+wsl -d %WSL_DISTRO% -- bash "%PROJECT_WSL%/scripts/wsl/start_avatar_services.sh"
 start "" %FRONTEND_URL%

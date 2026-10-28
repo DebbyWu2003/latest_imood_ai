@@ -19,7 +19,7 @@ scripts\windows\stop.bat
 
 WSL 內：`bash scripts/wsl/start.sh [vendor|full]`、`bash scripts/wsl/stop.sh`。
 模式優先順序：命令列參數 > 環境變數 `MODE` > `imood/pipeline.yaml` 的 `mode`（預設 `vendor`）。
-`vendor` 透過 `scripts/wsl/start_step12_v2.sh`（`LEGACY_VOICE=0`）啟動，`start_step12_v2.bat` 同樣可用。
+`vendor` 透過 `scripts/wsl/start_avatar_services.sh`（`LEGACY_VOICE=0`）啟動，`start_avatar_services.bat` 同樣可用。
 
 ## 2. 程式結構（`imood/`）
 

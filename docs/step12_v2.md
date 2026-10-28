@@ -133,14 +133,14 @@ Full system running: **23.3 GB of 24 GB**.
 On the reference machine, two unrelated GPU services (a CosyVoice TTS on :8001 and a service on :8000) must stay stopped while the demo runs.
 
 ## Start / stop
-- **Start everything:** `scripts\windows\start_step12_v2.bat`. It starts llama-server if it isn't running, starts both WSL services **in Ubuntu-24.04**, waits until they are ready, and opens the imood page.
-  - WSL only: `wsl -d Ubuntu-24.04 -- bash <repo-in-wsl>/scripts/wsl/start_step12_v2.sh`
-- **Stop:** `scripts\windows\stop_step12_v2.bat` stops **everything** (both WSL services and llama-server) and prints the remaining VRAM (desktop only, about 1.5 GB).
+- **Start everything:** `scripts\windows\start_avatar_services.bat`. It starts llama-server if it isn't running, starts both WSL services **in Ubuntu-24.04**, waits until they are ready, and opens the imood page.
+  - WSL only: `wsl -d Ubuntu-24.04 -- bash <repo-in-wsl>/scripts/wsl/start_avatar_services.sh`
+- **Stop:** `scripts\windows\stop_avatar_services.bat` stops **everything** (both WSL services and llama-server) and prints the remaining VRAM (desktop only, about 1.5 GB).
 - **Logs:** `/root/lt_logs/lt_cyber_gf.log` (LiveTalking + adapter), `logs/voice_service.log`.
 - **Headless test:** `wsl -d Ubuntu-24.04 -- bash -c "source /root/livetalking/LiveTalking/.venv-lt/bin/activate && cd <repo-in-wsl> && python scripts/wsl/perf/step12_v2_e2e_test.py [--mode full|sentence]"`
 
 ## Fall back to the Step 12 MVP
-1. `scripts\windows\stop_step12_v2.bat` (this also stops llama-server), then start llama again with `scripts\windows\start_llama.bat`. The v2 voice service must be stopped because running both would not fit in 24 GB.
+1. `scripts\windows\stop_avatar_services.bat` (this also stops llama-server), then start llama again with `scripts\windows\start_llama.bat`. The v2 voice service must be stopped because running both would not fit in 24 GB.
 2. Start LiveTalking the MVP way: `wsl -d Ubuntu-24.04 -- bash <repo-in-wsl>/scripts/wsl/lt_test_start.sh`, or keep the v2 launcher alone, since upstream `/humanaudio` is unchanged.
 3. Open http://localhost:8010/index.html → connect, then run `scripts\windows\run_step12_mvp.bat`.
 

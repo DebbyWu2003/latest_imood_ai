@@ -133,8 +133,8 @@
       "livetalking_source_modified": false
     },
     "frontend_page": "web/imood_ai.html -> http://localhost:8010/imood/imood_ai.html",
-    "start": "scripts/windows/start_step12_v2.bat",
-    "stop": "scripts/windows/stop_step12_v2.bat"
+    "start": "scripts/windows/start_avatar_services.bat",
+    "stop": "scripts/windows/stop_avatar_services.bat"
   },
   "conflicting_gpu_services": "On the reference machine two unrelated GPU services (a CosyVoice TTS service on :8001 in the same WSL distro and a Windows service on :8000) must be stopped while the demo runs; the full stack needs ~23.3 GB of 24 GB VRAM."
 }

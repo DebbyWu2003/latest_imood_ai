@@ -7,7 +7,7 @@
 build_plan(mode) is the one place that decides which services a mode needs (Factory); each mode is a different
 list built from the same Service description (Strategy):
 
-  vendor : LiveTalking + adapter only. Starts through scripts/wsl/start_step12_v2.sh with LEGACY_VOICE=0.
+  vendor : LiveTalking + adapter only. Starts through scripts/wsl/start_avatar_services.sh with LEGACY_VOICE=0.
   full   : LiveTalking + BERT emotion service (UDP) + voice service (ASR, LLM client, TTS, microphone WS).
            llama-server (:8090) runs on Windows; this launcher only checks it.
 
@@ -63,7 +63,7 @@ def build_plan(mode, cfg=None, env=None):
     log_dir = f"{root}/logs"
     lt_url = cfg.get("livetalking", {}).get("url", "http://127.0.0.1:8010")
     plan = [Service(
-        name="livetalking", argv=["bash", f"{root}/scripts/wsl/start_step12_v2.sh"], log=f"{log_dir}/start_livetalking.log",
+        name="livetalking", argv=["bash", f"{root}/scripts/wsl/start_avatar_services.sh"], log=f"{log_dir}/start_livetalking.log",
         ready=_http_ok(f"{lt_url}/cyber_gf/stats", '"code": 0'), env={"LEGACY_VOICE": "0"},
         stop_patterns=("livetalking_cyber_gf.py",), foreground=True)]
     if mode == "vendor":
