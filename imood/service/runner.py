@@ -34,15 +34,16 @@ def _switch_face(base, sessionid, vendor_emotion):
         pass
 
 
-def run_job(job):
-    import numpy as np, soundfile as sf, soxr
-    a, c, tf = VOICE_CONFIG["asr"], VOICE_CONFIG["tts"], SERVICE_CONFIG["tts_fast"]
-    out = ROOT / SERVICE_CONFIG["output_dir"] / job.id
-    out.mkdir(parents=True, exist_ok=True)
-    (out / "question.wav").write_bytes(job.wav)
-    base = LIVETALKING_CONFIG["url"]
+def _prepare_output_dir(job):
+    """Create this job's output directory and store the question audio in it."""
+    output_dir = ROOT / SERVICE_CONFIG["output_dir"] / job.id
+    output_dir.mkdir(parents=True, exist_ok=True)
+    (output_dir / "question.wav").write_bytes(job.wav)
+    return output_dir
 
-    # session: from the page, else automatic discovery
+
+def _resolve_session(job, base):
+    """Use the session from the page, else discover one; raise when the named session is not active."""
     if not job.sessionid:
         try:
             job.sessionid, _ = discover_session(base, LIVETALKING_CONFIG["avatar_id"])
@@ -53,13 +54,24 @@ def run_job(job):
         if job.sessionid not in active:
             raise RuntimeError(f"LiveTalking session {job.sessionid} is not active - reconnect the avatar page")
 
-    # ---- ASR
+
+def _transcribe(job, asr_config):
+    """Speech recognition unless the transcript is already known (microphone path: recognised and merged upstream)."""
     job.state = "asr"
-    if job.transcript:                                  # microphone path: already recognised (and merged) upstream
+    if job.transcript:
         duration = 0.0
     else:
-        job.transcript, duration = transcriber.transcribe(MODELS["asr"], job.wav, a)
+        job.transcript, duration = transcriber.transcribe(MODELS["asr"], job.wav, asr_config)
     job.mark("asr_done"); job.metrics["input_audio_s"] = round(duration, 2)
+
+
+def run_job(job):
+    import numpy as np, soundfile as sf, soxr
+    a, c, tf = VOICE_CONFIG["asr"], VOICE_CONFIG["tts"], SERVICE_CONFIG["tts_fast"]
+    out = _prepare_output_dir(job)
+    base = LIVETALKING_CONFIG["url"]
+    _resolve_session(job, base)
+    _transcribe(job, a)
 
     # ---- producer (TTS) / consumer (sender) plumbing
     text_q, audio_q = queue.Queue(), queue.Queue()

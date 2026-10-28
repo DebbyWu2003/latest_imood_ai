@@ -271,7 +271,7 @@ def _fake_stream_segments(tts, tts_kw, text_q, rs, emit, stat, mark, raw24, sent
         sent16.append(y); emit(y.astype("<f4").tobytes())
 
 
-def _run_job_with_fakes(job_mode, emotion, sessionid="sess1", sessions=("sess1",), cfg_override=None, lt=None):
+def _run_job_with_fakes(job_mode, emotion, sessionid="sess1", sessions=("sess1",), cfg_override=None, lt=None, transcript=""):
     """Run service.runner.run_job against fakes. Returns (job, fake_framed_or_None, fake_calls, out_dir)."""
     from imood.service import runner
     from imood.service.job import Job
@@ -291,7 +291,7 @@ def _run_job_with_fakes(job_mode, emotion, sessionid="sess1", sessions=("sess1",
             return {"code": 0, "data": dict(UTT_STATS)}
         runner.lt_get = lt_get
         runner.discover_session = lambda base, avatar: fake_calls.append(("discover", avatar)) or ("found-sess", [])
-        runner.transcriber.transcribe = lambda model, wav, a: fake_calls.append(("asr", model, wav)) or ("你好呀", 1.5)
+        runner.transcriber.transcribe = lambda model, wav, a: fake_calls.append(("asr", model, wav, a)) or ("你好呀", 1.5)
         runner.llm_deltas = lambda cfg, text: iter(["今天心情真的很好呀。", "我們一起出去玩吧！"])
         runner.tts_voice.stream_segments = _fake_stream_segments
         runner._emotion_client = lambda: emotion
@@ -304,6 +304,7 @@ def _run_job_with_fakes(job_mode, emotion, sessionid="sess1", sessions=("sess1",
             runner.cfgmod.load = lambda path=None: {**real_load(path), **cfg_override}
         _FakeFramed.instances.clear()
         job = Job(b"RIFFwav", sessionid, job_mode)
+        job.transcript = transcript
         try:
             runner.run_job(job)
             err = None
@@ -370,6 +371,25 @@ def test_run_job_without_emotion_client():
     try:
         assert err is None and job.state == "done" and "emotion" not in job.metrics
         assert fc.calls[1] == ("begin", "sess1", job.id, "", job.reply)
+    finally:
+        shutil.rmtree(ROOT / "outputs/_characterization_tmp", ignore_errors=True)
+
+
+def test_run_job_known_transcript_skips_asr():
+    job, err, fc, calls, out = _run_job_with_fakes("full", None, transcript="已經辨識好的句子")
+    try:
+        assert err is None and job.state == "done" and job.transcript == "已經辨識好的句子"
+        assert not any(c[0] == "asr" for c in calls) and job.metrics["input_audio_s"] == 0.0 and "asr_done" in job.timestamps
+        assert (out / "transcript.txt").read_text(encoding="utf-8") == "已經辨識好的句子\n"
+    finally:
+        shutil.rmtree(ROOT / "outputs/_characterization_tmp", ignore_errors=True)
+
+
+def test_run_job_asr_receives_model_wav_and_config():
+    from imood.service.state import VOICE_CONFIG
+    job, err, fc, calls, out = _run_job_with_fakes("full", None)
+    try:
+        assert err is None and ("asr", "fake-asr", b"RIFFwav", VOICE_CONFIG["asr"]) in calls
     finally:
         shutil.rmtree(ROOT / "outputs/_characterization_tmp", ignore_errors=True)
 
@@ -632,7 +652,8 @@ def test_emotion_interfaces():
 
 TESTS = [test_segmenter, test_llm_deltas, test_stream_segments, test_job, test_http_api, test_worker_error_handling,
          test_run_job_full_mode_framed, test_run_job_sentence_mode_and_emotion_not_ready,
-         test_run_job_without_emotion_client, test_run_job_session_errors, test_run_job_http_transport,
+         test_run_job_without_emotion_client, test_run_job_known_transcript_skips_asr,
+         test_run_job_asr_receives_model_wav_and_config, test_run_job_session_errors, test_run_job_http_transport,
          test_voice_settings, test_livetalking_api, test_launcher_plan_details, test_launcher_helpers, test_config_and_contract_files,
          test_external_interface_names, test_emotion_interfaces]
 
