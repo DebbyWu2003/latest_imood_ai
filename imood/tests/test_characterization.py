@@ -40,11 +40,11 @@ def test_segmenter():
     s = Segmenter(SEG_CFG)
     assert s.feed("你好。") == []                                    # too short: held back
     assert s.feed("今天天氣真的很好呀。") == ["你好。今天天氣真的很好呀。"]   # merged with the held piece
-    assert s.buf == "" and s.flush() == []
+    assert s.buffer == "" and s.flush() == []
 
     s = Segmenter(SEG_CFG)
     assert s.feed("今天天氣真的很好啊！！然後") == ["今天天氣真的很好啊！！"]
-    assert s.buf == "然後" and s.flush() == ["然後"] and s.buf == ""
+    assert s.buffer == "然後" and s.flush() == ["然後"] and s.buffer == ""
 
     s = Segmenter(SEG_CFG)                                             # closing quote after the end mark stays with the sentence
     assert s.feed("他說：「今天天氣真的很好。」然後") == ["他說：「今天天氣真的很好。」"]
@@ -52,7 +52,7 @@ def test_segmenter():
     s = Segmenter(SEG_CFG)                                             # no end mark: comma fallback only at >= max chars
     assert s.feed("甲" * 30 + "，" + "乙" * 29) == []
     out = s.feed("乙")
-    assert out == ["甲" * 30 + "，"] and s.buf == "乙" * 30
+    assert out == ["甲" * 30 + "，"] and s.buffer == "乙" * 30
 
     s = Segmenter(SEG_CFG)                                             # char-by-char feeding gives the same result as one feed
     pieces = []
