@@ -14,7 +14,7 @@ from imood.downstream.framed_client import FramedClient
 from imood.downstream.livetalking_api import discover_session, lt_get
 from imood.emotion.udp_client import EmotionClientSync
 from imood.intake import transcriber
-from imood.service.state import CFG, LT, M, ROOT, V2
+from imood.service.state import LIVETALKING_CONFIG, MODELS, ROOT, SERVICE_CONFIG, VOICE_CONFIG
 from imood.voice import tts_voice
 
 
@@ -36,16 +36,16 @@ def _switch_face(base, sessionid, vendor_emotion):
 
 def run_job(job):
     import numpy as np, soundfile as sf, soxr
-    a, c, tf = CFG["asr"], CFG["tts"], V2["tts_fast"]
-    out = ROOT / V2["output_dir"] / job.id
+    a, c, tf = VOICE_CONFIG["asr"], VOICE_CONFIG["tts"], SERVICE_CONFIG["tts_fast"]
+    out = ROOT / SERVICE_CONFIG["output_dir"] / job.id
     out.mkdir(parents=True, exist_ok=True)
     (out / "question.wav").write_bytes(job.wav)
-    base = LT["url"]
+    base = LIVETALKING_CONFIG["url"]
 
     # session: from the page, else automatic discovery
     if not job.sessionid:
         try:
-            job.sessionid, _ = discover_session(base, LT["avatar_id"])
+            job.sessionid, _ = discover_session(base, LIVETALKING_CONFIG["avatar_id"])
         except SystemExit as e:
             raise RuntimeError(str(e).strip())
     else:
@@ -58,16 +58,16 @@ def run_job(job):
     if job.transcript:                                  # microphone path: already recognised (and merged) upstream
         duration = 0.0
     else:
-        job.transcript, duration = transcriber.transcribe(M["asr"], job.wav, a)
+        job.transcript, duration = transcriber.transcribe(MODELS["asr"], job.wav, a)
     job.mark("asr_done"); job.metrics["input_audio_s"] = round(duration, 2)
 
     # ---- producer (TTS) / consumer (sender) plumbing
     text_q, audio_q = queue.Queue(), queue.Queue()
     utt = job.id
-    rs = soxr.ResampleStream(V2["resample"]["from_hz"], V2["resample"]["to_hz"], 1, dtype="float32")
+    rs = soxr.ResampleStream(SERVICE_CONFIG["resample"]["from_hz"], SERVICE_CONFIG["resample"]["to_hz"], 1, dtype="float32")
     raw24, sent16 = [], []
     stat = {"tts_chunks": 0, "audio_q_max": 0, "tts_segments": 0}
-    tts_kw = dict(language=c["language"], ref_audio=str(ROOT / c["ref_audio"]), ref_text=CFG["ref_text"],
+    tts_kw = dict(language=c["language"], ref_audio=str(ROOT / c["ref_audio"]), ref_text=VOICE_CONFIG["ref_text"],
                   xvec_only=tf["xvec_only"], append_silence=tf["append_silence"], chunk_size=tf["chunk_size"])
     dcfg = cfgmod.load().get("downstream", {})
     framed = dcfg.get("transport", "framed") == "framed" and dcfg.get("enabled", True)
@@ -87,7 +87,7 @@ def run_job(job):
 
     def producer():
         try:
-            tts_voice.stream_segments(M["tts"], tts_kw, text_q, rs, emit, stat, job.mark, raw24, sent16)
+            tts_voice.stream_segments(MODELS["tts"], tts_kw, text_q, rs, emit, stat, job.mark, raw24, sent16)
             job.mark("tts_done")
         except Exception as e:
             job.error = f"TTS: {e}"; job.log.append(traceback.format_exc())
@@ -149,9 +149,9 @@ def run_job(job):
 
     # ---- LLM (streamed) -> segments
     job.state = "thinking"
-    seg = Segmenter(V2["llm_to_tts"])
+    seg = Segmenter(SERVICE_CONFIG["llm_to_tts"])
     sentence_mode = job.mode == "sentence"
-    for d in llm_deltas(CFG, job.transcript):
+    for d in llm_deltas(VOICE_CONFIG, job.transcript):
         job.mark("llm_first_token")
         job.reply += d
         if sentence_mode:
@@ -196,10 +196,10 @@ def run_job(job):
         "lt_frames": lt_d.get("frames"), "lt_max_queue_frames": lt_d.get("max_queue_frames"),
         "lt_underruns": lt_d.get("underruns"), "lt_underrun_frames": lt_d.get("underrun_frames"),
         "lt_overflows": lt_d.get("overflows"), "lt_fps": lt_d.get("lt_fps"),
-        "tts_rtf": round((job.ts.get("tts_done", 0) - job.ts.get("first_segment_ready", 0)) / max(len(audio24) / 24000, 1e-6), 3),
+        "tts_rtf": round((job.timestamps.get("tts_done", 0) - job.timestamps.get("first_segment_ready", 0)) / max(len(audio24) / 24000, 1e-6), 3),
     })
-    if "avatar_speaking_start" in job.ts and "avatar_speaking_end" in job.ts:
-        job.metrics["avatar_spoke_s"] = round(job.ts["avatar_speaking_end"] - job.ts["avatar_speaking_start"], 3)
+    if "avatar_speaking_start" in job.timestamps and "avatar_speaking_end" in job.timestamps:
+        job.metrics["avatar_spoke_s"] = round(job.timestamps["avatar_speaking_end"] - job.timestamps["avatar_speaking_start"], 3)
     (out / "transcript.txt").write_text(job.transcript + "\n", encoding="utf-8")
     (out / "reply.txt").write_text(job.reply + "\n", encoding="utf-8")
     job.state = "error" if job.error else "done"

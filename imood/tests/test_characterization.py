@@ -141,17 +141,19 @@ def test_job():
     assert re.fullmatch(r"\d{8}_\d{6}_[0-9a-f]{4}", j.id)
     assert (j.wav, j.sessionid, j.mode, j.state, j.error) == (b"wav", "sess", "full", "queued", None)
     assert (j.transcript, j.reply, j.segments, j.metrics, j.log) == ("", "", [], {}, [])
-    assert j.ts == {"request_received": 0.0}
-    j.mark("a", wall=j.wall0 + 1.23456)
-    j.mark("a", wall=j.wall0 + 9)                                     # first mark wins
-    assert j.ts["a"] == 1.235
+    assert j.timestamps == {"request_received": 0.0}
+    j.mark("a", wall=j.wall_start + 1.23456)
+    j.mark("a", wall=j.wall_start + 9)                                     # first mark wins
+    assert j.timestamps["a"] == 1.235
     j.mark("b")
-    assert 0 <= j.ts["b"] < 1
+    assert 0 <= j.timestamps["b"] < 1
     j.log.extend(str(i) for i in range(40))
     info = j.info()
     assert list(info) == ["job", "state", "error", "mode", "sessionid", "transcript", "reply", "segments",
                           "timestamps_s", "metrics", "log"]
-    assert info["log"] == [str(i) for i in range(10, 40)] and info["timestamps_s"] is j.ts
+    assert info["log"] == [str(i) for i in range(10, 40)] and info["timestamps_s"] is j.timestamps
+    from imood.service.job import normalize_mode
+    assert [normalize_mode(m) for m in ("sentence", "full", "bogus", "", None, "FULL")] == ["sentence", "full", "sentence", "sentence", "sentence", "sentence"]
 
 
 def _http(port, method, path, body=None):
@@ -164,11 +166,11 @@ def _http(port, method, path, body=None):
 
 def test_http_api():
     from imood.service import http_api
-    from imood.service.state import JOB_Q, JOBS, M, V2
-    srv, port = serve_http(http_api.H)
+    from imood.service.state import JOB_QUEUE, JOBS, MODELS, SERVICE_CONFIG
+    srv, port = serve_http(http_api.ApiHandler)
     try:
         st, hd, js = _http(port, "GET", "/api/health")
-        assert st == 200 and js == {"ok": True, "models": list(M), "setup_s": M.get("_setup")}
+        assert st == 200 and js == {"ok": True, "models": list(MODELS), "setup_s": MODELS.get("_setup")}
         assert hd["Content-Type"] == "application/json; charset=utf-8" and hd["Access-Control-Allow-Origin"] == "*"
         assert _http(port, "GET", "/api/job/nope")[::2] == (404, {"error": "unknown job"})
         assert _http(port, "GET", "/nothing")[::2] == (404, {"error": "not found"})
@@ -180,13 +182,13 @@ def test_http_api():
         st, _, js = _http(port, "POST", "/api/ask?mode=bogus&sessionid=abc", b"x" * 100)
         job = JOBS[js["job"]]
         assert st == 200 and (job.mode, job.sessionid, job.wav) == ("sentence", "abc", b"x" * 100)
-        assert JOB_Q.get_nowait() is job
+        assert JOB_QUEUE.get_nowait() is job
         st, _, js = _http(port, "POST", "/api/ask?mode=sentence", b"x" * 100)
         assert JOBS[js["job"]].mode == "sentence" and JOBS[js["job"]].sessionid == ""
-        JOB_Q.get_nowait()
+        JOB_QUEUE.get_nowait()
         st, _, js = _http(port, "POST", "/api/ask", b"x" * 100)
-        assert JOBS[js["job"]].mode == V2["llm_to_tts"]["mode"]       # default comes from the config
-        JOB_Q.get_nowait()
+        assert JOBS[js["job"]].mode == SERVICE_CONFIG["llm_to_tts"]["mode"]       # default comes from the config
+        JOB_QUEUE.get_nowait()
         assert _http(port, "GET", f"/api/job/{js['job']}")[0] == 200
         assert _http(port, "GET", f"/api/job/{js['job']}")[2]["state"] == "queued"
     finally:
@@ -197,7 +199,7 @@ def test_http_api():
 def test_worker_error_handling():
     from imood.service import http_api
     from imood.service.job import Job
-    from imood.service.state import JOB_Q
+    from imood.service.state import JOB_QUEUE
     ran = []
 
     def fake_run(job):
@@ -206,9 +208,9 @@ def test_worker_error_handling():
             raise RuntimeError("kaboom")
         job.state = "done"
     http_api.run_job = fake_run                                         # the worker thread keeps the fake until the process ends
-    threading.Thread(target=http_api.worker, daemon=True).start()
+    threading.Thread(target=http_api.run_job_worker, daemon=True).start()
     bad, good = Job(b"", "boom", "full"), Job(b"", "ok", "full")
-    JOB_Q.put(bad); JOB_Q.put(good)
+    JOB_QUEUE.put(bad); JOB_QUEUE.put(good)
     assert wait_for(lambda: good.state == "done")
     assert (bad.state, bad.error) == ("error", "kaboom") and "RuntimeError: kaboom" in bad.log[-1]
     assert ran == [bad.id, good.id]
@@ -273,14 +275,14 @@ def _run_job_with_fakes(job_mode, emotion, sessionid="sess1", sessions=("sess1",
     """Run service.runner.run_job against fakes. Returns (job, fake_framed_or_None, fake_calls, out_dir)."""
     from imood.service import runner
     from imood.service.job import Job
-    from imood.service.state import M, V2
-    saved = {k: getattr(runner, k) for k in ("lt_get", "discover_session", "llm_deltas", "_emotion_client", "FramedClient", "V2", "LT")}
+    from imood.service.state import MODELS, SERVICE_CONFIG
+    saved = {k: getattr(runner, k) for k in ("lt_get", "discover_session", "llm_deltas", "_emotion_client", "FramedClient", "SERVICE_CONFIG", "LIVETALKING_CONFIG")}
     saved_stream, saved_tr, saved_load = runner.tts_voice.stream_segments, runner.transcriber.transcribe, runner.cfgmod.load
-    saved_models = dict(M)
+    saved_models = dict(MODELS)
     fake_calls = []
     tmp_rel = "outputs/_characterization_tmp"
     try:
-        M["asr"], M["tts"] = "fake-asr", "fake-tts"
+        MODELS["asr"], MODELS["tts"] = "fake-asr", "fake-tts"
 
         def lt_get(base, path):
             fake_calls.append(("lt_get", path))
@@ -294,9 +296,9 @@ def _run_job_with_fakes(job_mode, emotion, sessionid="sess1", sessions=("sess1",
         runner.tts_voice.stream_segments = _fake_stream_segments
         runner._emotion_client = lambda: emotion
         runner.FramedClient = _FakeFramed
-        runner.V2 = {**V2, "output_dir": tmp_rel}
+        runner.SERVICE_CONFIG = {**SERVICE_CONFIG, "output_dir": tmp_rel}
         if lt:
-            runner.LT = lt
+            runner.LIVETALKING_CONFIG = lt
         if cfg_override is not None:
             real_load = saved_load
             runner.cfgmod.load = lambda path=None: {**real_load(path), **cfg_override}
@@ -312,7 +314,7 @@ def _run_job_with_fakes(job_mode, emotion, sessionid="sess1", sessions=("sess1",
         for k, v in saved.items():
             setattr(runner, k, v)
         runner.tts_voice.stream_segments, runner.transcriber.transcribe, runner.cfgmod.load = saved_stream, saved_tr, saved_load
-        M.clear(); M.update(saved_models)
+        MODELS.clear(); MODELS.update(saved_models)
 
 
 def test_run_job_full_mode_framed():
@@ -333,7 +335,7 @@ def test_run_job_full_mode_framed():
         for key in ("asr_done", "first_segment_ready", "llm_first_token", "llm_done", "tts_first_chunk", "tts_done",
                     "first_audio_submitted", "audio_stream_closed", "first_frame_put_livetalking",
                     "avatar_speaking_start", "avatar_speaking_end"):
-            assert key in job.ts, key
+            assert key in job.timestamps, key
         assert fc.args == ("127.0.0.1", 8100)
         kinds = [c[0] for c in fc.calls]
         assert kinds[0] == "open" and kinds[1] == "begin" and kinds[-2:] == ["end", "close"] and set(kinds[2:-2]) == {"audio"}
@@ -433,7 +435,7 @@ def test_voice_settings():
     assert cfg["ref_text"] == (ROOT / voice["tts"]["ref_text_file"]).read_text(encoding="utf-8").strip()
     assert {k: v for k, v in cfg.items() if k not in ("persona", "ref_text")} == voice
     from imood.service import state
-    assert state.CFG == cfg
+    assert state.VOICE_CONFIG == cfg
 
 
 class _LtApiHandler(BaseHTTPRequestHandler):
