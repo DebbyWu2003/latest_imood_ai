@@ -1,6 +1,6 @@
 """Run one job: wav -> ASR -> LLM (streamed) -> TTS (resampled) -> LiveTalking, with BERT emotion in parallel.
 
-Same flow and timings as the legacy voice service; the pieces now live in intake/transcriber, dialogue/, voice/tts_voice.
+Pieces: intake/transcriber (ASR), dialogue/ (LLM, segmenter), voice/tts_voice (TTS).
 Emotion: the reply text goes to the BERT UDP service at the same time as to TTS; at the first audio chunk the result is
 used if it is ready, otherwise the default (never waited for).
 """
@@ -15,7 +15,7 @@ from imood.emotion.udp_client import EmotionClientSync
 from imood.intake import transcriber
 from imood.service.state import CFG, LT, M, ROOT, V2
 from imood.voice import tts_voice
-from step12_mvp import discover_session, lt_get    # not moved yet (scripts/wsl)
+from step12_mvp import discover_session, lt_get
 
 
 def _emotion_client():
@@ -26,7 +26,7 @@ def _emotion_client():
 
 
 def _switch_face(base, sessionid, vendor_emotion):
-    """Interim: ask the LiveTalking adapter to change the face (the framed downstream link will do this itself)."""
+    """transport http only: ask the LiveTalking adapter to change the face (the framed link carries the emotion in BEGIN)."""
     try:
         req = urllib.request.Request(f"{base}/cyber_gf/emotion?sessionid={sessionid}&emotion={vendor_emotion}", method="POST")
         urllib.request.urlopen(req, timeout=5).read()
@@ -42,7 +42,7 @@ def run_job(job):
     (out / "question.wav").write_bytes(job.wav)
     base = LT["url"]
 
-    # session: from the page, else automatic discovery (MVP logic)
+    # session: from the page, else automatic discovery
     if not job.sessionid:
         try:
             job.sessionid, _ = discover_session(base, LT["avatar_id"])

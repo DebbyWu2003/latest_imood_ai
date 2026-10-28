@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Article step 10 (LiveTalking install), verbatim commands wrapped in retries for flaky network.
+# LiveTalking install, wrapped in retries for flaky networks.
 # Already executed successfully on 2026-09-25 — do NOT re-run unless reinstalling.
 set -ex
 export PATH="$HOME/.local/bin:$PATH" UV_HTTP_TIMEOUT=300 UV_HTTP_RETRIES=10

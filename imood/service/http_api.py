@@ -1,4 +1,4 @@
-"""HTTP API of the full-mode voice service (moved unchanged): POST /api/ask, GET /api/job/<id>, GET /api/health."""
+"""HTTP API of the full-mode voice service : POST /api/ask, GET /api/job/<id>, GET /api/health."""
 import json, traceback
 from http.server import BaseHTTPRequestHandler
 

@@ -7,8 +7,7 @@
 build_plan(mode) is the one place that decides which services a mode needs (Factory); each mode is a different
 list built from the same Service description (Strategy):
 
-  vendor : LiveTalking + adapter only. This is the accepted vendor setup and goes through the unchanged
-           scripts/wsl/start_step12_v2.sh with LEGACY_VOICE=0.
+  vendor : LiveTalking + adapter only. Starts through scripts/wsl/start_step12_v2.sh with LEGACY_VOICE=0.
   full   : LiveTalking + BERT emotion service (UDP) + voice service (ASR, LLM client, TTS, microphone WS).
            llama-server (:8090) runs on Windows; this launcher only checks it.
 

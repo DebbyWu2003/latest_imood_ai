@@ -1,6 +1,6 @@
 """Face switching per emotion (calm / happy / sad): swaps the session's avatar frames, with a cross-fade.
 
-Extracted unchanged from the LiveTalking adapter. Runs inside the LiveTalking process (imports its logger/avatars).
+Runs inside the LiveTalking process (imports its logger/avatars).
 set_emotion(sess, emotion, speaking) is called by the vendor receiver, the framed receiver and the /cyber_gf/emotion route.
 """
 import os

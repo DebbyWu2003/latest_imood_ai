@@ -1,7 +1,6 @@
-# 兩種模式：使用、結構、測試、待確認項目
+# 兩種模式：使用、結構、測試、設定值
 
-分支 `refactor/own-architecture`。程式碼集中在套件 `imood/`，單一設定檔 `imood/pipeline.yaml`。
-設計背景與三方比較見 [architecture_v3_design.md](architecture_v3_design.md) 與 [architecture/architecture_compare.html](architecture/architecture_compare.html)。
+程式碼集中在套件 `imood/`，單一設定檔 `imood/pipeline.yaml`。
 
 ## 1. 怎麼啟動
 
@@ -20,7 +19,7 @@ scripts\windows\stop.bat
 
 WSL 內：`bash scripts/wsl/start.sh [vendor|full]`、`bash scripts/wsl/stop.sh`。
 模式優先順序：命令列參數 > 環境變數 `MODE` > `imood/pipeline.yaml` 的 `mode`（預設 `vendor`）。
-`vendor` 走的是**原本未改動**的 `scripts/wsl/start_step12_v2.sh`（`LEGACY_VOICE=0`），舊的 `start_step12_v2.bat` 也照常可用。
+`vendor` 透過 `scripts/wsl/start_step12_v2.sh`（`LEGACY_VOICE=0`）啟動，`start_step12_v2.bat` 同樣可用。
 
 ## 2. 程式結構（`imood/`）
 
@@ -37,8 +36,8 @@ service/             full 模式的語音服務：state、job、runner（一次�
 tests/               各模組測試
 ```
 
-對外名稱沒有改：`/cyber_gf/voice`、`/cyber_gf/audio_stream`、`/cyber_gf/utt/{utt}`、`/cyber_gf/stats`、`/cyber_gf/emotion`、`/imood/*`、廠商協定的訊息型別與欄位、LiveTalking 介面、avatar id、既有環境變數。
-舊路徑 `scripts/wsl/vendor_voice.py`、`livetalking_cyber_gf.py`、`voice_service.py` 留作轉接（shim），啟動腳本不用改。
+對外名稱：`/cyber_gf/voice`、`/cyber_gf/audio_stream`、`/cyber_gf/utt/{utt}`、`/cyber_gf/stats`、`/cyber_gf/emotion`、`/imood/*`、廠商協定的訊息型別與欄位、LiveTalking 介面、avatar id、既有環境變數。
+`scripts/wsl/vendor_voice.py`、`livetalking_cyber_gf.py`、`voice_service.py` 是啟動腳本使用的入口，內容只是呼叫 `imood/` 內對應的模組。
 
 ## 3. full 模式一次問答怎麼走
 
@@ -67,28 +66,27 @@ TTS 與 BERT 同時拿到回覆文字。`full` 的 LLM→TTS 預設是等整段�
 | `python -m imood.tests.test_launcher` | 各模式的服務清單 | 否 |
 | `bash scripts/wsl/smoke_baseline.sh` | vendor 協定測試、路由、換臉（每一步改完都要跑） | LiveTalking |
 
-## 5. 待確認的值
+## 5. 可調整的設定值
 
-下列值目前用暫定值，設定在 `imood/pipeline.yaml`，確認後只改設定：
+下列值的預設值寫在 `imood/pipeline.yaml`，要調整時只改設定：
 
 - BERT UDP port（8102）、逾時（300 ms）、逾時用的預設值（`neutral`）。
 - 下游 framed port（8100）、麥克風 WS port（8021）。
-- BEGIN 的 `emotion` 欄位型別：目前是廠商字串（`happy`、`sad`、`neutral`…）；若要改成 0–4 序號，只改 `downstream/framed_client` 呼叫處。
-- AUDIO 的序號欄位：目前沒有（單一連線、依序送）。
-- STATUS 欄位：目前 `{utterance, state}`，state 為 `received`、`playback_started`、`playback_ended`、`error`。
-- 單一 TCP 連線上的並行與中止（目前一個連線一句話，播完即關）。
-- BERT 取用的文字：目前是 TTS 拿到的第一段文字（`full` 模式即整段回覆）。
-- 瀏覽器端的文字回顯。
+- BEGIN 的 `emotion` 欄位：廠商字串（`happy`、`sad`、`neutral`…）；要改成 0–4 序號只需改 `downstream/framed_client` 的呼叫處。
+- AUDIO 沒有序號欄位（單一連線、依序送）。
+- STATUS 欄位：`{utterance, state}`，state 為 `received`、`playback_started`、`playback_ended`、`error`。
+- 一個 TCP 連線傳一句話，播完即關；沒有並行或中止機制。
+- BERT 取用的文字：TTS 拿到的第一段文字（`full` 模式即整段回覆）。
 
 ## 6. 已知限制
 
 - vendor 模式下 LiveTalking 內也會開 127.0.0.1:8100 的 framed 接收器（不影響廠商流程）；不要可設 `downstream.enabled: false`。
 - full 模式的全部元件共用一張 24 GB 顯卡，顯存吃緊時 TTS 會慢於即時而斷音（與傳輸方式無關，實測 http / framed 相同）。
-- `service/state.py` 仍從 `scripts/wsl/` 匯入舊函式（`load_cfg`、`discover_session`、`lt_get`），尚未搬進套件。
+- `service/state.py` 與 `service/runner.py` 從 `scripts/wsl/` 載入設定與工作階段輔助函式（`load_cfg`、`discover_session`、`lt_get`）。
 - 8 類 BERT 模型的標籤順序取自模型卡，無法從模型本身驗證。
 
 ## 7. 前端（`web/imood_ai.html`）
 
 - 上方標籤「模式:vendor / full」唯讀，依語音服務（:8020）有沒有回應判斷；切換模式靠 `start.bat vendor|full`。
 - 設定裡的「串流麥克風」（或網址 `?stream=1`）：full 模式下持續聆聽，伺服器自動斷句，每個想法產生一個回答。預設關閉，仍是點一下錄音、再點一下送出。
-- 數字人回答期間前端不送麥克風音訊（避免把她自己的聲音當成問題），所以回答時無法插話；要插話需要前端回音處理與後端中斷回答，尚未實作。
+- 數字人回答期間前端不送麥克風音訊（避免把她自己的聲音當成問題），所以回答時無法插話。

@@ -1,4 +1,4 @@
-# Single configuration entry point. Defaults deliver the accepted vendor setup.
+# Single configuration entry point. The default mode is vendor.
 mode: vendor                  # vendor | full
 
 vendor:
@@ -8,13 +8,13 @@ emotion:
   enabled: true               # used in full mode only
   default: neutral            # used on timeout / failure / too-short text
   udp_host: 127.0.0.1
-  udp_port: 8102              # TBD (to be confirmed)
-  timeout_ms: 300             # TBD (to be confirmed)
+  udp_port: 8102
+  timeout_ms: 300             # wait for the BERT reply at most this long, then use `default`
 
 downstream:
   host: 127.0.0.1
-  port: 8100                  # TBD (to be confirmed)
-  transport: framed           # framed (TCP BEGIN/AUDIO/END) | http (legacy chunked POST)
+  port: 8100
+  transport: framed           # framed (TCP BEGIN/AUDIO/END) | http (chunked POST to /cyber_gf/audio_stream)
   enabled: true
 
 livetalking:
@@ -24,9 +24,9 @@ intake:
   mic:                        # full mode: streaming microphone (WS /ws/audio, PCM16 16 kHz mono)
     enabled: true
     host: 127.0.0.1
-    port: 8021                  # TBD (to be confirmed)
+    port: 8021
 
-vad:                          # sentence cut-off, values of the early voice pipeline
+vad:                          # sentence cut-off and continuation window
   frame_ms: 20
   vad_aggressiveness: 2
   end_silence_ms: 900

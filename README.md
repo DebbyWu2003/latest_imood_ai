@@ -4,7 +4,7 @@ A fully local voice-to-avatar pipeline. A spoken question (WAV) is transcribed b
 
 > **Speech source (current default): vendor real-time voice.** The local ASR + LLM + TTS pipeline described below is **switched off by default** (`LEGACY_VOICE=0` in `config/paths.env` / `config/paths.bat`); startup then only launches LiveTalking. The avatar speaks audio pushed by the vendor to `ws://localhost:8010/cyber_gf/voice` (needs `VENDOR_VOICE_TOKEN`), see [docs/vendor_voice_receiver.md](docs/vendor_voice_receiver.md) and [docs/emotion_interface.md](docs/emotion_interface.md). The record-a-question button of the imood page only works with `LEGACY_VOICE=1`; sending recordings to the vendor is out of this project's scope (the vendor takes over that part). Everything below describes the legacy pipeline and still works with `LEGACY_VOICE=1`.
 
-> **Two modes (branch `refactor/own-architecture`).** `scripts\windows\start.bat vendor` (default, accepted vendor setup) or `start.bat full` (our pipeline: microphone → VAD → ASR → LLM → TTS ∥ BERT emotion → framed TCP link → LiveTalking). Code lives in the `imood/` package with one config file, `imood/pipeline.yaml`. See [docs/modes.md](docs/modes.md).
+> **Two modes.** `scripts\windows\start.bat vendor` (default, accepted vendor setup) or `start.bat full` (our pipeline: microphone → VAD → ASR → LLM → TTS ∥ BERT emotion → framed TCP link → LiveTalking). Code lives in the `imood/` package with one config file, `imood/pipeline.yaml`. See [docs/modes.md](docs/modes.md).
 
 **Legacy pipeline status: working end-to-end demo.** Local ASR · local LLM · local cloned TTS · streaming audio · LiveTalking/Wav2Lip avatar · WebRTC browser demo. No cloud APIs are used at runtime.
 

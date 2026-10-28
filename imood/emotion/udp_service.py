@@ -2,7 +2,7 @@
 
 request  datagram: JSON {"seq": int, "text": str}
 reply    datagram: JSON {"seq": int, "code": 0-4, "confidence": float}
-code = early five-class code (0 neutral, 1 joy, 2 anger, 3 sadness, 4 happy). Anything that cannot be
+code = five-class code (0 neutral, 1 joy, 2 anger, 3 sadness, 4 happy). Anything that cannot be
 classified (blocked by preprocessing, model not ready, error) replies the default code 0, never an error.
 
 Run (repo root):  python -m imood.emotion.udp_service      (env EMOTION_UDP_HOST / EMOTION_UDP_PORT / EMOTION_DEVICE / EMOTION_DTYPE)

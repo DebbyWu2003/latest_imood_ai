@@ -1,6 +1,6 @@
 """Emotion label layers (single source of truth).
 
-native 8 classes (model) -> five classes (early imood-emotion code 0-4)
+native 8 classes (model) -> five classes (code 0-4)
                          -> vendor string (BEGIN.emotion / vendor protocol)
                          -> face (avatar variant).
 """

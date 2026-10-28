@@ -1,6 +1,6 @@
 @echo off
 rem Start the demo for one mode:   start.bat [vendor|full]      (default: imood\pipeline.yaml "mode", or env MODE)
-rem   vendor = accepted vendor setup (LiveTalking only)
+rem   vendor = LiveTalking only
 rem   full   = our pipeline: LiveTalking + BERT emotion + voice service; also starts llama-server (Windows) if needed
 call "%~dp0..\..\config\paths.bat"
 if not defined PROJECT_WSL (echo ERROR: could not reach WSL distro %WSL_DISTRO% & exit /b 1)

@@ -1,4 +1,4 @@
-"""Project-owned LiveTalking launcher (imood/downstream/livetalking_plugin.py; started via scripts/wsl/livetalking_cyber_gf.py) + continuous-audio adapter (Step 12 v2).
+"""Project-owned LiveTalking launcher (imood/downstream/livetalking_plugin.py; started via scripts/wsl/livetalking_cyber_gf.py) + continuous-audio adapter.
 
 Runs the UNMODIFIED LiveTalking app.py (same CLI args), but first wraps server.routes.setup_routes so a
 few project routes are registered in the same aiohttp app (before upstream's catch-all static '/'):

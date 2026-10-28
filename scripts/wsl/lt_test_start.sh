@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Start LiveTalking in the background with the article's step 10/11 flags (test use only).
+# Start LiveTalking in the background (test use only).
 # Usage: lt_test_start.sh [avatar_id]   (default: wav2lip256_myavatar; official sample: wav2lip256_avatar1)
 source "$(dirname "$0")/../../config/paths.env"
 AVATAR_ID="${1:-$LT_AVATAR_ID}"

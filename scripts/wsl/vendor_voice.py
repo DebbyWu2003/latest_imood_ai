@@ -1,4 +1,4 @@
-"""Compatibility shim: the vendor receiver now lives in imood/intake/vendor_ws.py (unchanged)."""
+"""Entry point: the vendor receiver lives in imood/intake/vendor_ws.py."""
 import sys
 from pathlib import Path
 

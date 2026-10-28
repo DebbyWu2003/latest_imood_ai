@@ -1,7 +1,7 @@
 # Copy to %USERPROFILE%\.wslconfig, then run `wsl --shutdown` (restarts ALL WSL distros).
 # mirrored networking lets WSL reach llama-server on Windows via localhost:8090 and lets the Windows
 # browser reach LiveTalking / the voice service in WSL via localhost:8010 / :8020.
-# hostAddressLoopback is required for the WebRTC connection (from the original tutorial).
+# hostAddressLoopback is required for the WebRTC connection .
 [wsl2]
 memory=32GB
 networkingMode=mirrored

@@ -1,6 +1,6 @@
 """Continuation window: recognised sentence pieces wait for coalesce_ms of silence, then go on together.
 
-Same rule as the early voice server: a pause inside one thought (longer than the VAD end-silence) splits it into two
+A pause inside one thought (longer than the VAD end-silence) splits it into two
 utterances; holding the first transcript until the silence has lasted coalesce_ms merges the follow-up into the same
 question, so one thought gets one answer. Pure logic, no I/O.
 """

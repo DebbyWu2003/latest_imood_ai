@@ -1,4 +1,4 @@
-"""Sentence segmenter for streamed LLM text (moved unchanged from the legacy voice service)."""
+"""Sentence segmenter for streamed LLM text ."""
 import re
 
 

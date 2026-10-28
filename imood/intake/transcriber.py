@@ -1,4 +1,4 @@
-"""Speech recognition (faster-whisper). Moved unchanged from the legacy voice service."""
+"""Speech recognition (faster-whisper)."""
 import io
 import time
 

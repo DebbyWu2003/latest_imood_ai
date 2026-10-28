@@ -1,4 +1,4 @@
-"""Qwen3-TTS voice-clone streaming (FasterQwen3TTS) + stateful 24k->16k resampling. Moved unchanged from the legacy voice service."""
+"""Qwen3-TTS voice-clone streaming (FasterQwen3TTS) + stateful 24k->16k resampling."""
 import time
 
 import numpy as np

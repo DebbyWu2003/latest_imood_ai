@@ -1,7 +1,7 @@
 """VAD endpointing for the microphone path: PCM16 16 kHz mono chunks in, one Utterance out per finished sentence.
 
-Taken unchanged from the early voice pipeline (voice_asr.py: EndpointConfig, Utterance, Endpointer); the ASR part
-lives in intake/transcriber.py. Needs webrtcvad (package webrtcvad-wheels).
+Classes: EndpointConfig (thresholds), Utterance (one finished sentence), Endpointer (feed chunks, get utterances).
+Speech recognition is in intake/transcriber.py. Needs webrtcvad (package webrtcvad-wheels).
 """
 from __future__ import annotations
 

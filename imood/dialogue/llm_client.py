@@ -1,10 +1,10 @@
-"""Streaming llama.cpp client (OpenAI-style SSE); strips Qwen3 think blocks. Moved unchanged, config passed in."""
+"""Streaming llama.cpp client (OpenAI-style SSE); strips Qwen3 think blocks."""
 import json
 import urllib.request
 
 
 def llm_deltas(CFG, user_text):
-    """Same request as Step 9 llm_stream (persona system prompt, temperature, top_p, max_tokens), yielded incrementally."""
+    """Stream the reply for user_text: persona as system prompt, temperature / top_p / max_tokens from the config; yields text deltas."""
     body = {"messages": [{"role": "system", "content": CFG["persona"]}, {"role": "user", "content": user_text}],
             "stream": True, "temperature": CFG["llm"]["temperature"], "top_p": CFG["llm"]["top_p"],
             "max_tokens": CFG["llm"]["max_tokens"]}
