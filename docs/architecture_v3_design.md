@@ -50,40 +50,28 @@
 3. **BERT UDP 服務**：把早期 `imood-emotion` 的分類器（前處理、模型、標籤映射）包成 UDP 服務；8 類 → 5 類 → 臉的映射集中一處。
 4. **模式切換與設定**：單一設定檔（模式、位址、路徑），預設即交付版。
 
-## 5. 目錄結構（目標，命名用我們自己的）
+## 5. 目錄結構（實作後；以此為準，細節見 [modes.md](modes.md)）
 
 ```
 imood/
-  pipeline.yaml              # 單一設定入口（沿用早期習慣）
-  common/                    # 資料格式、標籤映射、框架協定（BEGIN／AUDIO／END／STATUS）
+  pipeline.yaml              # 單一設定入口：模式、情緒、下游、麥克風、VAD
+  launcher.py                # 依模式組出服務清單，start / stop / status
+  common/                    # labels、framing（BEGIN／AUDIO／END／STATUS）、config
   intake/
-    vendor_ws.py             # 廠商即時語音（現 vendor_voice.py）
-    mic_endpointer.py        # VAD 斷句（早期 voice_asr 的斷句）
+    vendor_ws.py             # 廠商即時語音
+    mic_ws.py                # 麥克風串流 WS（/ws/audio）
+    mic_endpointer.py        # VAD 斷句（取自早期 voice_asr）
+    coalescer.py             # 續句合併（取自早期 server）
     transcriber.py           # ASR
-  dialogue/
-    llm_client.py            # llama.cpp
-    persona.txt
-  voice/
-    tts_clone.py             # Qwen3-TTS 串流
-    resample.py
-  emotion/
-    preprocess.py            # 早期 emotion/preprocess.py
-    classifier.py            # 早期 emotion/classifier.py
-    labels.py
-    udp_service.py           # BERT UDP 服務
-    udp_client.py            # 用戶端（背景任務、逾時退回預設）
-  downstream/
-    framed_client.py         # 下游用戶端（TCP 分幀，對應早期 joygen_client）
-    framed_receiver.py       # LiveTalking 端接收器
-    face_switcher.py         # 換臉＋淡入淡出（現 set_emotion／_install_fade）
-    livetalking_plugin.py    # 外掛路由（現 livetalking_cyber_gf.py）
-  assets/                    # avatar 素材與建立流程（現 wan_idle.py 等）
-  web/
-  ops/                       # 啟動／停止／健檢
+  dialogue/                  # llm_client、segmenter
+  voice/                     # tts_voice（Qwen3-TTS 串流、重取樣）
+  emotion/                   # classifier、preprocess、labels、udp_service、udp_client
+  downstream/                # framed_client、framed_receiver、face_switcher、livetalking_plugin
+  service/                   # full 模式語音服務：state、job、runner、http_api、main
   tests/
 ```
 
-## 6. 改寫順序（每一步都驗證功能不變）
+## 6. 改寫順序（每一步都驗證功能不變；P0–P6 已完成，各一個 commit）
 
 1. **P0 基準**：在分支上錄下基準——`vendor_voice_test.py` 15 項、情緒換臉實機流程、`/cyber_gf/*` 路徑行為。
 2. **P1 設定與共用資料格式**：新增 `pipeline.yaml`、`common/`，現有程式暫不動。
