@@ -11,7 +11,7 @@ def main():
     assert names("full") == ["livetalking", "emotion", "voice"], names("full")
     assert names("full", {"emotion": {"enabled": False}}) == ["livetalking", "voice"]
     vendor = launcher.build_plan("vendor", cfg={}, env={})[0]
-    assert vendor.argv[-1].endswith("scripts/wsl/start_step12_v2.sh"), "vendor must use the unchanged accepted start script"
+    assert vendor.argv[-1].endswith("scripts/wsl/start_step12_v2.sh"), "vendor mode starts through start_step12_v2.sh"
     assert vendor.env == {"LEGACY_VOICE": "0"}
     try:
         launcher.build_plan("nope", cfg={}, env={})

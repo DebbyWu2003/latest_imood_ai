@@ -1,7 +1,6 @@
 {
   "_note": "Inventory of the external components on the REFERENCE machine (Windows 11 + RTX 4090 + WSL Ubuntu-24.04). Informational only: scripts read config/paths.env / config/paths.bat, not this file. Nothing listed here is in the repo.",
   "llama_cpp": {
-    "article_step": 2,
     "purpose": "LLM server (brain)",
     "status": "installed, tested standalone",
     "path": "E:\\llama.cpp",
@@ -12,8 +11,7 @@
     "model": {
       "path": "E:\\llama.cpp\\models\\Qwen3-14B-Q4_K_M.gguf",
       "source": "https://huggingface.co/Qwen/Qwen3-14B-GGUF",
-      "sha256": "500a8806e85ee9c83f3ae08420295592451379b4f8cf2d0f41c15dffeb6b81f0",
-      "article_name": "Qwen3-14B-Instruct-Q4_K_M.gguf"
+      "sha256": "500a8806e85ee9c83f3ae08420295592451379b4f8cf2d0f41c15dffeb6b81f0"
     },
     "logs": [
       "E:\\llama.cpp\\server_out.log",
@@ -21,7 +19,6 @@
     ]
   },
   "comfyui": {
-    "article_step": 4,
     "purpose": "generate idle.mp4 (Wan2.2 image-to-video)",
     "status": "installed, used once",
     "path": "E:\\ComfyUI_windows_portable",
@@ -59,10 +56,6 @@
     "leftover_installer": "E:\\ComfyUI_portable.7z (1.8 GB, safe to delete manually)"
   },
   "livetalking": {
-    "article_step": [
-      10,
-      11
-    ],
     "purpose": "real-time wav2lip lip sync + WebRTC video",
     "status": "installed, tested standalone",
     "wsl_distro": "Ubuntu-24.04",
@@ -101,7 +94,6 @@
     ]
   },
   "voice_pipeline": {
-    "article_step": 9,
     "purpose": "ASR + LLM client + voice-clone TTS (our rebuild of the author's install-voice.sh)",
     "status": "installed, tested with test.wav",
     "wsl_distro": "Ubuntu-24.04",

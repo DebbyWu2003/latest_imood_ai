@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Start Step 12 v2 services in WSL (distro from config/paths.env, default Ubuntu-24.04):
 #   1. LiveTalking (unmodified app.py) via the project launcher/adapter  -> :8010
-#   2. legacy voice service (Whisper + FasterQwen3TTS) -> :8020, ONLY if LEGACY_VOICE=1 (config/paths.env)
+#   2. voice service (Whisper + FasterQwen3TTS) -> :8020, ONLY if LEGACY_VOICE=1 (config/paths.env)
 # Vendor speech arrives at ws://localhost:8010/cyber_gf/voice (needs VENDOR_VOICE_TOKEN, see docs/vendor_voice_receiver.md).
 # llama-server (:8090, only for LEGACY_VOICE=1) runs on Windows (scripts\windows\start_llama.bat).
 set -e
@@ -21,7 +21,7 @@ sleep 2
   exec setsid nohup python "$PROJECT_WSL/scripts/wsl/livetalking_cyber_gf.py" --transport webrtc --model wav2lip \
     --avatar_id "$LT_AVATAR_ID" --stun "$LT_STUN" ) > "$LT_LOG_DIR/lt_cyber_gf.log" 2>&1 < /dev/null &
 
-# 2. legacy voice service (only with LEGACY_VOICE=1; otherwise speech arrives via /cyber_gf/voice)
+# 2. voice service (only with LEGACY_VOICE=1; otherwise speech arrives via /cyber_gf/voice)
 if [ "$LEGACY_VOICE" = 1 ]; then
 ( source "$TTS_FAST_VENV/bin/activate" && export HF_HOME && \
   SP=$(python -c "import site;print(site.getsitepackages()[0])") && \

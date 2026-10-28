@@ -1,5 +1,5 @@
 """Submit the official ComfyUI 'video_wan2_2_14B_i2v' template (flattened to API format,
-default non-turbo path) with the article's step-4 settings, then wait and print the output path.
+default non-turbo path) with the settings below, then wait and print the output path.
 
 Usage: python wan_idle.py [--image NAME_IN_ComfyUI/input] [--prefix video/idle] [--prompt TEXT] [--neg-extra TEXT] [--seed N]"""
 import argparse, json, sys, time, urllib.request, random
@@ -11,7 +11,7 @@ PROMPT = "她保持静止，轻微呼吸起伏；中途缓慢眨一次眼； 结
 NEG = ("色调艳丽，过曝，静态，细节模糊不清，字幕，风格，作品，画作，画面，静止，整体发灰，最差质量，低质量，JPEG压缩残留，"
        "丑陋的，残缺的，多余的手指，画得不好的手部，画得不好的脸部，畸形的，毁容的，形态畸形的肢体，手指融合，静止不动的画面，"
        "杂乱的背景，三条腿，背景人很多，倒着走")
-W, H, DURATION, FPS = 704, 896, 5, 16          # article: 704x896, 5 s; template fps 16 -> 81 frames
+W, H, DURATION, FPS = 704, 896, 5, 16          # 704x896, 5 s; template fps 16 -> 81 frames
 LENGTH = int(DURATION * FPS + 1)
 STEPS, CFG, SPLIT = 20, 3.5, 10                  # template defaults (enable_turbo_mode = false)
 ap = argparse.ArgumentParser()

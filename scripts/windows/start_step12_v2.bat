@@ -1,6 +1,6 @@
 @echo off
 rem Step 12 v2: LiveTalking/adapter (WSL %WSL_DISTRO%), then open the imood page.
-rem With LEGACY_VOICE=1 it also starts llama-server (Windows) and the legacy voice service (default 0, see config\paths.bat).
+rem With LEGACY_VOICE=1 it also starts llama-server (Windows) and the voice service (default 0, see config\paths.bat).
 call "%~dp0..\..\config\paths.bat"
 if not defined PROJECT_WSL (echo ERROR: could not reach WSL distro %WSL_DISTRO% & exit /b 1)
 if not "%LEGACY_VOICE%"=="1" goto start_services
