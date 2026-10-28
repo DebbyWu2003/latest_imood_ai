@@ -423,6 +423,62 @@ def test_run_job_http_transport():
         shutil.rmtree(ROOT / "outputs/_characterization_tmp", ignore_errors=True)
 
 
+# ---------------------------------------------------------------- shared helpers (voice settings, LiveTalking API)
+
+def test_voice_settings():
+    from imood.common.voice_settings import load_voice_config
+    cfg = load_voice_config()
+    voice = json.loads((ROOT / "config/voice.json").read_text(encoding="utf-8"))
+    assert cfg["persona"] == (ROOT / voice["llm"]["persona_file"]).read_text(encoding="utf-8").strip()
+    assert cfg["ref_text"] == (ROOT / voice["tts"]["ref_text_file"]).read_text(encoding="utf-8").strip()
+    assert {k: v for k, v in cfg.items() if k not in ("persona", "ref_text")} == voice
+    from imood.service import state
+    assert state.CFG == cfg
+
+
+class _LtApiHandler(BaseHTTPRequestHandler):
+    sessions = []
+    posted = []
+
+    def do_GET(self):
+        body = json.dumps({"data": {"sessions": _LtApiHandler.sessions}}).encode()
+        self.send_response(200); self.send_header("Content-Length", str(len(body))); self.end_headers(); self.wfile.write(body)
+
+    def do_POST(self):
+        _LtApiHandler.posted.append((self.path, self.headers["Content-Type"], json.loads(self.rfile.read(int(self.headers["Content-Length"])))))
+        body = b'{"data": true}'
+        self.send_response(200); self.send_header("Content-Length", str(len(body))); self.end_headers(); self.wfile.write(body)
+
+    def log_message(self, *a):
+        pass
+
+
+def test_livetalking_api():
+    from imood.downstream import livetalking_api as api
+    srv, port = serve_http(_LtApiHandler)
+    base = f"http://127.0.0.1:{port}"
+    try:
+        _LtApiHandler.sessions = [{"sessionid": "a", "avatar_id": "x"}, {"sessionid": "b", "avatar_id": "y"},
+                                  {"sessionid": "c", "avatar_id": "x"}]
+        assert api.lt_get(base, "/api/admin/sessions") == {"data": {"sessions": _LtApiHandler.sessions}}
+        assert api.lt_post_json(base, "/is_speaking", {"sessionid": "a"}) == {"data": True}
+        assert _LtApiHandler.posted == [("/is_speaking", "application/json", {"sessionid": "a"})]
+        assert api.discover_session(base, "x") == ("c", _LtApiHandler.sessions)          # newest session of that avatar
+        assert api.discover_session(base, "y") == ("b", _LtApiHandler.sessions)
+        assert api.discover_session(base, "x", explicit="b") == ("b", _LtApiHandler.sessions)
+        for call_args, expected in (((base, "zzz"), api.HOW_TO_GET_SESSION.format(avatar="zzz", url=base)),
+                                    ((base, "x", "nope"),
+                                     "--session nope is not an active LiveTalking session. Active: ['a', 'b', 'c']")):
+            try:
+                api.discover_session(*call_args)
+                raise AssertionError("expected SystemExit")
+            except SystemExit as e:
+                assert str(e) == expected
+    finally:
+        srv.shutdown()
+    assert api.HOW_TO_GET_SESSION.startswith("\n  No active LiveTalking WebRTC session for this avatar.\n  1. Make sure LiveTalking is running in Ubuntu-24.04 with --avatar_id {avatar} (port 8010).")
+
+
 # ---------------------------------------------------------------- launcher, config
 
 def test_launcher_plan_details():
@@ -575,7 +631,7 @@ def test_emotion_interfaces():
 TESTS = [test_segmenter, test_llm_deltas, test_stream_segments, test_job, test_http_api, test_worker_error_handling,
          test_run_job_full_mode_framed, test_run_job_sentence_mode_and_emotion_not_ready,
          test_run_job_without_emotion_client, test_run_job_session_errors, test_run_job_http_transport,
-         test_launcher_plan_details, test_launcher_helpers, test_config_and_contract_files,
+         test_voice_settings, test_livetalking_api, test_launcher_plan_details, test_launcher_helpers, test_config_and_contract_files,
          test_external_interface_names, test_emotion_interfaces]
 
 

@@ -11,11 +11,11 @@ from imood.common.labels import code_to_vendor
 from imood.dialogue.llm_client import llm_deltas
 from imood.dialogue.segmenter import Segmenter
 from imood.downstream.framed_client import FramedClient
+from imood.downstream.livetalking_api import discover_session, lt_get
 from imood.emotion.udp_client import EmotionClientSync
 from imood.intake import transcriber
 from imood.service.state import CFG, LT, M, ROOT, V2
 from imood.voice import tts_voice
-from batch_reply import discover_session, lt_get
 
 
 def _emotion_client():

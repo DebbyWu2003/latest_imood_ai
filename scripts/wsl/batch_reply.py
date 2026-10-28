@@ -10,24 +10,15 @@ import argparse, datetime, json, os, sys, time, urllib.request, uuid
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE))
-from voice_pipeline_bench import load_cfg, llm_stream   # Step 9: config/persona/ref_text loader + streaming LLM call
-
 ROOT = HERE.parents[1]
+sys.path.insert(0, str(HERE))
+sys.path.insert(0, str(ROOT))
+from voice_pipeline_bench import llm_stream
+from imood.common.voice_settings import load_voice_config
+from imood.downstream.livetalking_api import discover_session, lt_get, lt_post_json
 
 
 # ---------------------------------------------------------------- LiveTalking helpers
-def lt_get(base, path):
-    with urllib.request.urlopen(base + path, timeout=5) as r:
-        return json.loads(r.read())
-
-
-def lt_post_json(base, path, body):
-    req = urllib.request.Request(base + path, data=json.dumps(body).encode(), headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=5) as r:
-        return json.loads(r.read())
-
-
 def post_humanaudio(base, sessionid, wav_path):
     """multipart/form-data: field 'sessionid' + file field 'file' (exactly what server/routes.py:humanaudio reads)."""
     boundary = uuid.uuid4().hex
@@ -41,32 +32,6 @@ def post_humanaudio(base, sessionid, wav_path):
         return json.loads(r.read())
 
 
-HOW_TO_GET_SESSION = """
-  No active LiveTalking WebRTC session for this avatar.
-  1. Make sure LiveTalking is running in Ubuntu-24.04 with --avatar_id {avatar} (port 8010).
-  2. Open http://localhost:8010/index.html in the browser and click the connect/start button;
-     the avatar video must be playing.
-  3. Re-run this command. The session is discovered automatically from GET {url}/api/admin/sessions.
-     (Or pass it explicitly: --session <id>. It is shown on the page after connecting and in the
-      LiveTalking log line 'offer sessionid=...'.)
-"""
-
-
-def discover_session(base, avatar_id, explicit=None):
-    sessions = lt_get(base, "/api/admin/sessions")["data"]["sessions"]
-    if explicit:
-        if not any(s["sessionid"] == explicit for s in sessions):
-            sys.exit(f"--session {explicit} is not an active LiveTalking session. Active: {[s['sessionid'] for s in sessions]}")
-        return explicit, sessions
-    mine = [s for s in sessions if s.get("avatar_id") == avatar_id]
-    if not mine:
-        sys.exit(HOW_TO_GET_SESSION.format(avatar=avatar_id, url=base))
-    if len(mine) > 1:
-        print(f"[warn] {len(mine)} active sessions for {avatar_id}; using the newest. All: "
-              f"{[s['sessionid'] for s in mine]}  (use --session to choose)", flush=True)
-    return mine[-1]["sessionid"], sessions        # dict insertion order -> last = newest
-
-
 # ---------------------------------------------------------------- main
 def main():
     ap = argparse.ArgumentParser()
@@ -74,7 +39,7 @@ def main():
     ap.add_argument("--session", default=os.environ.get("LT_SESSION_ID"), help="override auto-discovery")
     args = ap.parse_args()
 
-    cfg = load_cfg()                                                   # voice.json + persona + ref_text
+    cfg = load_voice_config()                                          # voice.json + persona + ref_text
     s12 = json.loads((ROOT / "config/batch_reply.json").read_text(encoding="utf-8"))
     if os.environ.get("WSL_DISTRO_NAME") != s12["wsl_distro"]:
         sys.exit(f"Must run in WSL {s12['wsl_distro']} (current: {os.environ.get('WSL_DISTRO_NAME')!r})")

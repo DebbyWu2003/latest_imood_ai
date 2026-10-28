@@ -10,6 +10,8 @@ import argparse, json, re, subprocess, sys, threading, time, urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
+from imood.common.voice_settings import load_voice_config
 
 
 class GpuSampler(threading.Thread):
@@ -31,13 +33,6 @@ class GpuSampler(threading.Thread):
             except Exception:
                 pass
             time.sleep(self.interval)
-
-
-def load_cfg():
-    cfg = json.loads((ROOT / "config/voice.json").read_text(encoding="utf-8"))
-    cfg["persona"] = (ROOT / cfg["llm"]["persona_file"]).read_text(encoding="utf-8").strip()
-    cfg["ref_text"] = (ROOT / cfg["tts"]["ref_text_file"]).read_text(encoding="utf-8").strip()
-    return cfg
 
 
 def llm_stream(cfg, user_text, t0):
@@ -68,7 +63,7 @@ def main():
     ap.add_argument("--runs", type=int, default=2, help="run 1 = cold (first CUDA kernels), later runs = warm")
     args = ap.parse_args()
 
-    cfg = load_cfg()
+    cfg = load_voice_config()
     out_dir = ROOT / cfg["output_dir"]
     out_dir.mkdir(parents=True, exist_ok=True)
     out_wav = Path(args.out) if args.out else out_dir / "reply.wav"
