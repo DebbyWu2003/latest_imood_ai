@@ -11,6 +11,8 @@
     ?control=http://host:8010 LiveTalking base for /sse, /record (default: same origin)
     ?voice=http://host:8020   voice service base           (default: this host :8020)
     ?stun=1                   use a public STUN server
+    ?stream=1                 full mode: stream the microphone to ws://host:8021/ws/audio (server cuts sentences) instead of click-to-record
+    ?mic=ws://host:8021       microphone streaming base
 -->
 <style>
   :root {
@@ -160,6 +162,7 @@
 <header class="topbar">
   <div class="brand"><div class="logo">✦</div><div><b>imood.ai</b><small>即時視訊聊天</small></div></div>
   <div class="pill" id="pill" data-state="idle"><i></i><span id="pillText">尚未連線</span></div>
+  <span class="pill" id="modeTag" title="後端目前的模式（由啟動方式決定：start.bat vendor | full）">模式：…</span>
   <button class="icon-btn" id="openDiag" title="診斷資訊">
     <svg viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg></button>
   <button class="icon-btn" id="openSettings" title="設定">
@@ -241,6 +244,8 @@
       <small>例如另開的 RTP 接收端：http://localhost:8030</small></label>
     <label class="field">LiveTalking 控制（/sse、/record）<input type="text" id="cfgControl" placeholder="留空 = 本頁同源"></label>
     <label class="field">語音服務<input type="text" id="cfgVoice"><small>預設為本機 :8020</small></label>
+    <label class="switch"><input type="checkbox" id="useStream"> 串流麥克風（full 模式，自動斷句）</label>
+    <label class="field">麥克風串流 WS<input type="text" id="cfgMic"><small>預設為本機 :8021；vendor 模式沒有這個服務</small></label>
     <button class="primary" id="btnApply">套用</button>
   </div>
 </aside>
@@ -262,6 +267,8 @@ const cfg = (() => {
   const pick = (k, d) => q.has(k) ? q.get(k) : (saved[k] ?? d);
   return { media: pick('media', ''), control: pick('control', ''),
            voice: pick('voice', `${location.protocol}//${location.hostname}:8020`),
+           mic: pick('mic', `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.hostname}:8021`),
+           stream: q.has('stream') ? q.get('stream') === '1' : !!saved.stream,
            stun: q.has('stun') ? q.get('stun') === '1' : !!saved.stun };
 })();
 const base = u => (u || '').trim().replace(/\/+$/, '');
@@ -375,6 +382,7 @@ $('btnRec').onclick = toggleRecord;
 // ---- microphone: MediaRecorder -> decode -> 16 kHz mono 16-bit WAV (same format as assets/test.wav)
 let mic = null;   // { rec, chunks, t0, timer } while recording
 async function toggleMic() {
+  if (cfg.stream) return toggleStream();
   if (mic) { mic.rec.stop(); return; }
   if (!navigator.mediaDevices?.getUserMedia) return toast('此瀏覽器環境無法使用麥克風（需 https 或 localhost）。');
   let stream;
@@ -417,6 +425,56 @@ async function toWav16k(blob) {
   pcm.forEach((x, i) => v.setInt16(44 + i * 2, Math.max(-1, Math.min(1, x)) * 0x7fff, true));
   return new Blob([v], { type: 'audio/wav' });
 }
+// ---- microphone streaming (full mode): 16 kHz PCM16 chunks -> ws /ws/audio; the server cuts sentences (VAD), recognises,
+// merges short pauses and queues one answer job per thought ({type:'job'}); progress is followed like a recorded question.
+// Chunks are not sent while an answer is in progress (busy), so the avatar's own voice is not picked up as a question.
+const WORKLET = `class P extends AudioWorkletProcessor { process(i) { const c = i[0][0]; if (c) this.port.postMessage(c.slice()); return true; } }
+registerProcessor('pcm-tap', P);`;
+async function toggleStream() {
+  if (mic) { mic.stop(); return; }
+  if (!navigator.mediaDevices?.getUserMedia) return toast('此瀏覽器環境無法使用麥克風（需 https 或 localhost）。');
+  if (!sessionid) return toast('視訊未連線');
+  $('btnMic').disabled = true;
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } }); }
+  catch (e) { log(`mic denied: ${e}`); refreshAskButtons(); return toast(`無法取得麥克風：${e.message || e}`); }
+  const ws = new WebSocket(`${base(cfg.mic)}/ws/audio?session=${encodeURIComponent(sessionid)}`);
+  ws.binaryType = 'arraybuffer';
+  const ctx = new AudioContext({ sampleRate: 16000 });
+  let opened = false, buf = [], n = 0;
+  const stop = () => {
+    try { ws.close(); } catch {}
+    stream.getTracks().forEach(t => t.stop()); ctx.close().catch(() => {});
+    mic = null; $('btnMic').classList.remove('on'); refreshAskButtons();
+    $('micInfo').textContent = pc?.connectionState === 'connected' ? '點麥克風開始說話，再點一下送出' : '開始視訊後即可說話';
+  };
+  mic = { stop };
+  ws.onopen = async () => {
+    opened = true;
+    await ctx.audioWorklet.addModule(URL.createObjectURL(new Blob([WORKLET], { type: 'application/javascript' })));
+    const tap = new AudioWorkletNode(ctx, 'pcm-tap');
+    ctx.createMediaStreamSource(stream).connect(tap);
+    tap.port.onmessage = e => {
+      if (busy || ws.readyState !== 1) return;
+      buf.push(e.data); n += e.data.length;
+      if (n < 2560) return;                                   // 160 ms
+      const out = new Int16Array(n); let o = 0;
+      for (const b of buf) for (let i = 0; i < b.length; i++) out[o++] = Math.max(-1, Math.min(1, b[i])) * 0x7fff;
+      buf = []; n = 0; ws.send(out.buffer);
+    };
+    $('btnMic').disabled = false; $('btnMic').classList.add('on');
+    $('micInfo').textContent = '聆聽中（自動斷句），再點一下結束'; log('mic streaming…');
+  };
+  ws.onmessage = e => {
+    let m; try { m = JSON.parse(e.data); } catch { return; }
+    if (m.type === 'asr_start') $('micInfo').textContent = '辨識中…';
+    else if (m.type === 'transcript') log(`heard: ${m.text}`);
+    else if (m.type === 'job') { ask(null, `🎙 ${toTW(m.text).slice(0, 20)}`, m.job); $('micInfo').textContent = '聆聽中（自動斷句），再點一下結束'; }
+    else if (m.type === 'error') { log(`mic stream error: ${m.error}`); toast(m.error); }
+  };
+  ws.onerror = () => { if (!opened) toast(`連不上麥克風串流（${base(cfg.mic)}）。這是 full 模式才有的服務。`); };
+  ws.onclose = () => { if (mic) stop(); };
+}
 $('btnMic').onclick = toggleMic;
 $('wavFile').onchange = () => { $('fileName').textContent = $('wavFile').files[0]?.name || '上傳 WAV'; refreshAskButtons(); };
 $('btnSend').onclick = () => { const f = $('wavFile').files[0]; if (f) ask(f, `📎 ${f.name}`); };
@@ -444,7 +502,7 @@ function addMsg(who) {
 }
 const dots = () => { const s = document.createElement('span'); s.className = 'dots'; s.innerHTML = '<i></i><i></i><i></i>'; return s; };
 
-async function ask(audio, label) {
+async function ask(audio, label, jobId) {
   busy = true; refreshAskButtons();
   const me = addMsg('me'), her = addMsg('her');
   me.bubble.textContent = label; me.meta.textContent = '辨識中…';
@@ -455,7 +513,7 @@ async function ask(audio, label) {
   const finish = () => { busy = false; refreshAskButtons(); if (pc?.connectionState === 'connected') $('micInfo').textContent = '點麥克風開始說話，再點一下送出'; };
   let r;
   try {
-    r = await (await fetch(`${base(cfg.voice)}/api/ask?sessionid=${sessionid}&mode=${mode}`, { method: 'POST', body: audio })).json();
+    r = jobId ? { job: jobId } : await (await fetch(`${base(cfg.voice)}/api/ask?sessionid=${sessionid}&mode=${mode}`, { method: 'POST', body: audio })).json();
     if (!r.job) throw new Error(r.error || 'no job id');
   } catch (e) { setState('error'); her.bubble.textContent = `語音服務無法使用（${base(cfg.voice)}）。舊的錄音流程預設關閉（LEGACY_VOICE=0）；廠商語音請用發送端送到 /cyber_gf/voice`; log(`voice service error: ${e}`); return finish(); }
   log(`job ${r.job}`);
@@ -523,12 +581,25 @@ function chooseAvatar(id) {
   if (pc) { log(`switching avatar -> ${id || 'server default'}`); disconnect(); doConnect(); }
 }
 
+// ---- backend mode (read-only): the voice service (:8020) only exists in full mode
+async function probeMode() {
+  let m = 'vendor';
+  try {
+    const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 2000);
+    const r = await fetch(`${base(cfg.voice)}/api/health`, { signal: ctl.signal, cache: 'no-store' }); clearTimeout(t);
+    if (r.ok && (await r.json()).ok) m = 'full';
+  } catch {}
+  $('modeTag').textContent = `模式：${m}`; log(`backend mode: ${m}`);
+}
+probeMode();
+
 // ---- drawers
 function openDrawer(id) { closeDrawers(); $(id).classList.add('on'); $('scrim').classList.add('on'); }
 function closeDrawers() { document.querySelectorAll('.drawer.on').forEach(d => d.classList.remove('on')); $('scrim').classList.remove('on'); }
 $('openDiag').onclick = () => openDrawer('diag');
 $('openSettings').onclick = () => {
   $('useStun').checked = cfg.stun; $('cfgMedia').value = cfg.media; $('cfgControl').value = cfg.control; $('cfgVoice').value = cfg.voice;
+  $('useStream').checked = cfg.stream; $('cfgMic').value = cfg.mic;
   openDrawer('settings');
 };
 $('scrim').onclick = closeDrawers;
@@ -542,7 +613,8 @@ $('btnApply').onclick = () => {
   const avatar = $('avatar').value, avatarChanged = avatar !== store.get('cyber_gf_avatar', '');
   const reconnect = pc && (avatarChanged || cfg.media !== $('cfgMedia').value.trim() || cfg.stun !== $('useStun').checked);
   Object.assign(cfg, { media: $('cfgMedia').value.trim(), control: $('cfgControl').value.trim(),
-                       voice: $('cfgVoice').value.trim(), stun: $('useStun').checked });
+                       voice: $('cfgVoice').value.trim(), stun: $('useStun').checked,
+                       stream: $('useStream').checked, mic: $('cfgMic').value.trim() });
   store.set(CFG_KEY, JSON.stringify(cfg));
   closeDrawers(); log(`settings: media=${cfg.media || '(same origin)'} control=${cfg.control || '(same origin)'} voice=${cfg.voice} stun=${cfg.stun}`);
   selectAvatar(avatar); store.set('cyber_gf_avatar', avatar);
