@@ -1,91 +1,91 @@
 """Parallel HTTP range downloader: python parallel_download.py URL OUT [connections]"""
 import os, sys, threading, urllib.request, time
 
-url, out = sys.argv[1], sys.argv[2]
-n = int(sys.argv[3]) if len(sys.argv) > 3 else 48
+source_url, output_path = sys.argv[1], sys.argv[2]
+connection_count = int(sys.argv[3]) if len(sys.argv) > 3 else 48
 CHUNK = 4 * 1024 * 1024
-UA = {"User-Agent": "Mozilla/5.0"}
+REQUEST_HEADERS = {"User-Agent": "Mozilla/5.0"}
 
-req = urllib.request.Request(url, headers=UA, method="HEAD")
-with urllib.request.urlopen(req) as r:
-    size = int(r.headers["Content-Length"])
-    final = r.geturl()
+head_request = urllib.request.Request(source_url, headers=REQUEST_HEADERS, method="HEAD")
+with urllib.request.urlopen(head_request) as response:
+    size = int(response.headers["Content-Length"])
+    final_url = response.geturl()
 print(f"size={size}", flush=True)
 
-part = out + ".part"
-done_file = out + ".done"
-if os.path.exists(out) and not os.path.exists(part):
+part_path = output_path + ".part"
+done_path = output_path + ".done"
+if os.path.exists(output_path) and not os.path.exists(part_path):
     # continue a partial single-stream download: whole chunks already on disk count as done
-    have = os.path.getsize(out)
-    os.replace(out, part)
-    with open(done_file, "w") as d:
-        d.writelines(f"{i}\n" for i in range(0, size, CHUNK) if i + CHUNK <= have)
-    with open(part, "r+b") as f:
-        f.truncate(size)
-elif not os.path.exists(part) or os.path.getsize(part) != size:
-    open(part, "wb").close()
+    bytes_on_disk = os.path.getsize(output_path)
+    os.replace(output_path, part_path)
+    with open(done_path, "w") as done_handle:
+        done_handle.writelines(f"{i}\n" for i in range(0, size, CHUNK) if i + CHUNK <= bytes_on_disk)
+    with open(part_path, "r+b") as part_handle:
+        part_handle.truncate(size)
+elif not os.path.exists(part_path) or os.path.getsize(part_path) != size:
+    open(part_path, "wb").close()
     if os.name == "nt":  # sparse => truncate is instant instead of zero-filling the whole file
         import subprocess
-        subprocess.run(["fsutil", "sparse", "setflag", os.path.abspath(part)], check=True, capture_output=True)
-    with open(part, "r+b") as f:
-        f.truncate(size)
-done_file = out + ".done"
+        subprocess.run(["fsutil", "sparse", "setflag", os.path.abspath(part_path)], check=True, capture_output=True)
+    with open(part_path, "r+b") as part_handle:
+        part_handle.truncate(size)
+done_path = output_path + ".done"
 done = set()
-if os.path.exists(done_file):
-    done = {int(x) for x in open(done_file).read().split()}
+if os.path.exists(done_path):
+    done = {int(offset_text) for offset_text in open(done_path).read().split()}
 chunks = [i for i in range(0, size, CHUNK) if i not in done]
 lock = threading.Lock()
-cur_url = [final]
+current_url = [final_url]
 
 
 def refresh():
-    with urllib.request.urlopen(urllib.request.Request(url, headers=UA, method="HEAD")) as r:
-        cur_url[0] = r.geturl()
+    with urllib.request.urlopen(urllib.request.Request(source_url, headers=REQUEST_HEADERS, method="HEAD")) as response:
+        current_url[0] = response.geturl()
 
 
 def worker():
-    fh = open(part, "r+b")
+    part_file = open(part_path, "r+b")
     while True:
         with lock:
             if not chunks:
                 break
-            start = chunks.pop()
-        end = min(start + CHUNK, size) - 1
+            chunk_start = chunks.pop()
+        chunk_end = min(chunk_start + CHUNK, size) - 1
         for attempt in range(20):
             try:
-                h = dict(UA, Range=f"bytes={start}-{end}")
-                with urllib.request.urlopen(urllib.request.Request(cur_url[0], headers=h), timeout=60) as r:
-                    data = r.read()
-                if len(data) != end - start + 1:
+                request_headers = dict(REQUEST_HEADERS, Range=f"bytes={chunk_start}-{chunk_end}")
+                with urllib.request.urlopen(urllib.request.Request(current_url[0], headers=request_headers), timeout=60) as response:
+                    data = response.read()
+                if len(data) != chunk_end - chunk_start + 1:
                     raise IOError("short read")
-                fh.seek(start)
-                fh.write(data)
+                part_file.seek(chunk_start)
+                part_file.write(data)
                 with lock:
-                    done.add(start)
-                    with open(done_file, "a") as d:
-                        d.write(f"{start}\n")
+                    done.add(chunk_start)
+                    with open(done_path, "a") as done_handle:
+                        done_handle.write(f"{chunk_start}\n")
                 break
-            except Exception as e:
+            except Exception as error:
                 time.sleep(2)
                 try:
                     refresh()
                 except Exception:
                     pass
         else:
-            print("FAILED chunk", start, flush=True)
-    fh.close()
+            print("FAILED chunk", chunk_start, flush=True)
+    part_file.close()
 
 
-ts = [threading.Thread(target=worker, daemon=True) for _ in range(n)]
-for t in ts:
-    t.start()
-t0 = time.time()
-while any(t.is_alive() for t in ts):
+threads = [threading.Thread(target=worker, daemon=True) for _ in range(connection_count)]
+for thread in threads:
+    thread.start()
+started = time.time()
+while any(thread.is_alive() for thread in threads):
     time.sleep(30)
-    print(f"{out}: {len(done) * CHUNK * 100 // size}% {len(done) * CHUNK / (time.time() - t0) / 1e6:.2f}MB/s", flush=True)
+    print(f"{output_path}: {len(done) * CHUNK * 100 // size}% {len(done) * CHUNK / (time.time() - started) / 1e6:.2f}MB/s", flush=True)
 if all(i in done for i in range(0, size, CHUNK)):
-    os.replace(part, out)
-    os.remove(done_file)
-    print("DONE", out, flush=True)
+    os.replace(part_path, output_path)
+    os.remove(done_path)
+    print("DONE", output_path, flush=True)
 else:
-    print("INCOMPLETE", out, flush=True)
+    print("INCOMPLETE", output_path, flush=True)

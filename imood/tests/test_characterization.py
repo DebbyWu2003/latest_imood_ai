@@ -3,7 +3,7 @@
 No GPU, models or running services are used (fakes for ASR, LLM, TTS, LiveTalking and the framed link).
 Run in the voice venv from the repo root:  python -m imood.tests.test_characterization
 """
-import asyncio, http.client, json, queue, re, shutil, threading, time, urllib.request
+import asyncio, http.client, json, queue, re, shutil, threading, time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 

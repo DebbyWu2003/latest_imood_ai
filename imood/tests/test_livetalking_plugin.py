@@ -3,9 +3,8 @@
 The plugin imports LiveTalking's own modules, so run it in the LiveTalking venv from the repo root:
   /root/livetalking/LiveTalking/.venv-lt/bin/python -m imood.tests.test_livetalking_plugin
 """
-import asyncio, json, logging, queue, threading, time
+import asyncio, json, logging, queue, time
 from types import SimpleNamespace
-from pathlib import Path
 
 import numpy as np
 
